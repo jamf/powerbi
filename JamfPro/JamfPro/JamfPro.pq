@@ -1,4 +1,4 @@
-﻿[version="1.0.0"]
+[version="1.0.0"]
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
@@ -6,10 +6,29 @@ shared JamfPro.Contents =Value.ReplaceType(JamfNavTable, type function (url as t
 JamfPro__url="";
 
 
-JamfNavTable=(jamfUrl as text) as table =>
+JamfNavTable=(jamfUrl as text) as any =>
     let
         url = ValidateUrlScheme(jamfUrl),
-        temp_table=initializeGlobalRecord(url),
+        table = if uapiSupported(jamfUrl) then UAPISource(jamfUrl) else LegacySource(jamfUrl)
+        //temp_table = initializeGlobalRecord(jamfUrl),
+        //table = ComputersImpl(temp_table[computers])
+        
+    in
+        table;
+
+ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
+uapiSupported = (url as text) as logical =>
+    let
+        versionString = UAPIResource(url, "/v1/jamf-pro-version")[version],
+        jamfProVersion = List.FirstN(Text.Split(List.First(Text.Split(versionString, "-")), "."),2),
+        //supported = if (Number.FromText(jamfProVersion{0}) >= 10) then true else if (Number.FromText(jamfProVersion{1}) >= 16) then true else false
+        supported = true
+    in
+        supported;
+
+LegacySource = (url as text) as any =>
+    let
+        temp_table = initializeGlobalRecord(url),
         temp_mobile_devices=initializeMobileRecord(url),
         temp_mobile_devices_group=initializeMobileGroupRecord(url),
         temp_comp_group=initializeComputerGroupRecord(url),
@@ -25,21 +44,159 @@ JamfNavTable=(jamfUrl as text) as table =>
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
     in
+        temp_table;
+
+UAPISource = (url as text) as any =>
+    let
+        temp_table = initializeComputerRecord(url),
+        config_profiles = computerConfigurationProfilesImp(Table.SelectColumns(temp_table, {"configurationProfiles", "id"})),
+        computer_applications = computerApplicationsImp(Table.SelectColumns(temp_table, {"applications", "id"})),
+        computers = computerImp(Table.SelectColumns(temp_table, {"id", "udid", "general", "diskEncryption", "localUserAccounts", "purchasing", "storage", "userAndLocation", "hardware", "security", "operatingSystem"})),
+        computer_groups = computerGroupsImp(Table.SelectColumns(temp_table, {"id", "groupMemberships"})),
+        computer_extension_attributes = computerExtensionAttributesImp(Table.SelectColumns(temp_table, {"id", "general", "purchasing", "userAndLocation", "hardware", "operatingSystem", "extensionAttributes"})),
+        temp_mobile_devices = initializeMobileRecordUAPI(url),
+        source = #table({"Name", "Data", "ItemKind", "ItemName", "IsLeaf"}, {
+            { "Computers", computers, "Table", "Table", true },
+            { "Mobile Devices", temp_mobile_devices, "Table", "Table", true },
+            { "Computer Device Groups", computer_groups, "Table", "Table", true },
+            { "Computers - Extension Attributes", computer_extension_attributes, "Table", "Table", true },
+            { "Computers - Applications", computer_applications, "Table", "Table", true },
+            { "Computers - Configuration Profiles", config_profiles, "Table", "Table", true}
+        }),
+        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    in
         navTable;
 
-ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
-
-
-initializeGlobalRecord = (url as text) as any =>
+initializeGlobalRecord = (url as text, optional useUAPI as logical) as any =>
 let
+        
         response = JSSResource(url, "/computers"),
-       jsonComputers=Json.Document(response),
-       computers=Table.FromRecords(jsonComputers[computers]),
-       computersModified=Table.AddColumn(computers,"computerDetails", each GetComputerDetails([id],url)),
-       computerApps=Table.AddColumn(computers,"computerDetails",each GetComputerApps([id],url)),
-      return_record=Record.Combine({[computers=computersModified,computerApps=computerApps]})
+        jsonComputers=Json.Document(response),
+        computers=Table.FromRecords(jsonComputers[computers]),
+        computersModified=Table.AddColumn(computers,"computerDetails", each GetComputerDetails([id],url)),
+        computerApps=Table.AddColumn(computers,"computerDetails",each GetComputerApps([id],url)),
+        return_record=Record.Combine({[computers=computersModified,computerApps=computerApps]})
 in
-        return_record;
+        computerApps;
+
+initializeComputerRecord = (url as text) as any =>
+    let
+        // Grab the number of devices and figure out how many pages are needed.
+        devices = UAPIResource(url, "/v1/computers-inventory?page-size=1")[totalCount],
+        page_size = 1000,
+        pages = Number.RoundUp(devices / page_size),
+
+        // Sections used by the API to grab more of the components needed to build the table(s).
+        sections = {
+        "GENERAL",
+        "DISK_ENCRYPTION",
+        "PURCHASING",
+        "APPLICATIONS",
+        "USER_AND_LOCATION",
+        "CONFIGURATION_PROFILES",
+        "PRINTERS", "SERVICES",
+        "HARDWARE",
+        "LOCAL_USER_ACCOUNTS",
+        "CERTIFICATES",
+        "ATTACHMENTS",
+        "PLUGINS", "PACKAGE_RECEIPTS", "FONTS", "SECURITY", "OPERATING_SYSTEM", "LICENSED_SOFTWARE", "IBEACONS", "SOFTWARE_UPDATES", "EXTENSION_ATTRIBUTES", "CONTENT_CACHING", "GROUP_MEMBERSHIPS",
+        "STORAGE"},
+        query_string = Text.Combine(sections, "&section="),
+
+        // Generating the table using pages
+        temp_computers = List.Generate(
+            () => [page = 0, data = null ],
+            each [page] <= pages,
+            each [page=[page]+1, data=Table.FromRecords(UAPIResource(url, "/v1/computers-inventory?section=" & query_string & "&page-size=" & Text.From(page_size) & "&page=" & Text.From(page))[results])]
+        ),
+        //response = UAPIResource(url, "/v1/computers-inventory?section=" & query_string & "&page-size=10"),
+        //computers = Table.FromRecords(response[results])
+        temp_table = Table.SelectRows(Table.FromRecords(temp_computers), each [data] <> null),
+        raw_table = Table.Combine(temp_table[data])
+    in
+        raw_table;
+
+initializeMobileRecordUAPI = (url as text) as any =>
+    let
+        devices = UAPIResource(url, "/v2/mobile-devices?page-size=1")[totalCount],
+        page_size = 100,
+        pages = Number.RoundUp(devices / page_size),
+
+        // Generating the table using pages
+        temp_mobile_devices = List.Generate(
+            () => [page = 0, data = null],
+            each [page] <= pages,
+            each [page=[page]+1, data=Table.FromRecords(UAPIResource(url, "/v2/mobile-devices?page-size=" & Text.From(page_size) & "&page=" & Text.From(page))[results])]
+        ),
+        temp_table = Table.SelectRows(Table.FromRecords(temp_mobile_devices), each [data] <> null),
+        table = Table.Combine(temp_table[data])
+    in
+        table;
+
+computerImp = (computers as table) as any =>
+    let
+        general_expanded = Table.ExpandRecordColumn(computers, "general", {"name", "lastIpAddress", "lastReportedIp", "jamfBinaryVersion", "platform", "barcode1", "barcde2", "assetTag", "remoteManagement", "supervised", "mdmCapable", "reportDate", "lastContactTime", "lastCloudBackupDate", "lastEnrolledDate", "mdmProfileexpiration", "initialEntryDate", "distributionPoint", "site", "itunesStoreAccountActive", "enrolledViaAutomatedDeviceEnrollment", "userApprovedMdm", "enrollmentMethod"}),
+        disk_encryption_expanded = Table.ExpandRecordColumn(general_expanded, "diskEncryption", {"individualRecoveryKeyValidityStatus", "institutionalRecoveryKeyPresent", "diskEncryptionConfigurationName", "fileVault2EligibilityMessage", "fileVault2EnabledUserNames", "bootPartitionEncryptionDetails"}),
+        purchasing_expanded = Table.ExpandRecordColumn(disk_encryption_expanded, "purchasing", {"purchased", "leased", "poNumber", "lifeExpectancy", "purchasePrice", "purchasingAccount", "purchasingContact", "appleCareId", "vendor", "leaseDate", "poDate", "warrantyDate"}),
+        user_and_location_expanded = Table.ExpandRecordColumn(purchasing_expanded, "userAndLocation", {"username", "realname", "email", "position", "phone", "departmentId", "buildingId", "room"}),
+        hardware_expanded = Table.ExpandRecordColumn(user_and_location_expanded, "hardware", {"make", "model", "modelIdentifier", "serialNumber", "processorSpeedMhz", "processorCount", "coreCount", "processorType", "processorArchitecture", "busSpeedMhz", "cacheSizeKilobytes", "networkAdapterType", "macAddress", "altNetworkAdapterType", "altMacAddress", "totalRamMegabytes", "openRamSlots", "batteryCapacityPercent", "smcVersion", "nicSpeed", "opticalDrive", "bootRom", "bleCapable", "supportsIosAppInstalls"}),
+        security_expanded = Table.ExpandRecordColumn(hardware_expanded, "security", {"sipStatus", "gatekeeperStatus", "xprotectVersion", "autoLoginDisabled", "remoteDesktopEnabled", "activationLockEnabled", "secureBootLevel", "externalBootLevel", "bootstrapTokenAllowed"}),
+        //operating_system_expanded = Table.ExpandRecordColumn(security_expanded, "operatingSystem", {"name", "version", "build", "activeDirectoryStatus", "fileVault2Status"}, {"operatingSystem.name", "operatingSystem.version", "operatingSystem.build", "activeDirectoryStatus", "fileVault2Status"})
+        operating_system_expanded = Table.ExpandRecordColumn(security_expanded, "operatingSystem", {"name", "version", "build", "activeDirectoryStatus", "fileVault2Status"}, {"operatingSystem_name", "operatingSystem_version", "operatingSystem_build", "operatingSystem_activeDirectoryStatus", "operatingSystem_fileVault2Status"})
+    in
+        operating_system_expanded;
+
+computerApplicationsImp = (applications as table) as any =>
+    let
+        raw_table = Table.ExpandListColumn(applications, "applications"),
+        clean_table = Table.SelectRows(raw_table, each [applications] <> null),
+        expanded_table = Table.ExpandRecordColumn(clean_table, "applications", {"name", "path", "version", "macAppStore", "bundleId"}),
+        table = Table.RenameColumns(expanded_table, {"id", "Device ID"})
+    in
+        table;
+
+computerGroupsImp = (groups as table) as any =>
+    let
+        raw_table = Table.RenameColumns(groups, {"id", "Device ID"}),
+        temp_table = Table.ExpandListColumn(raw_table, "groupMemberships"),
+        table = Table.ExpandRecordColumn(temp_table, "groupMemberships", {"groupId", "groupName", "smartGroup"}, {"id", "name", "smartGroup"}),
+        cleaned_table = Table.SelectRows(table, each [id] <> null)
+    in
+        cleaned_table;
+
+computerConfigurationProfilesImp = (profiles as table) as any =>
+    let
+        raw_table = Table.RenameColumns(Table.ExpandListColumn(profiles, "configurationProfiles"), {"id", "Device ID"}),
+        clean_table = Table.SelectRows(raw_table, each [configurationProfiles] <> null),
+        expanded_table = Table.ExpandRecordColumn(clean_table, "configurationProfiles", {"id", "username", "lastInstalled", "removable", "displayName", "profileIdentifier"})
+    in
+        expanded_table;
+
+computerExtensionAttributesImp = (source as table) as any =>
+    let
+        extractExtensionAttributes = (source as table) as any =>
+            let
+                expand_list_table = Table.ExpandListColumn(source, "extensionAttributes"),
+                expand_record_table = Table.ExpandRecordColumn(expand_list_table, "extensionAttributes", {"definitionId", "name", "values", "dataType", "enabled", "multiValue"}),
+                table = Table.TransformColumns(expand_record_table, {"values", each if List.Count(_) > 0 then Text.Combine(_, ";") else null})
+            in
+                table,
+        general_extension_attributes_raw = Table.ExpandRecordColumn(Table.SelectColumns(source, {"id", "general"}),"general", {"extensionAttributes"}),
+        general_extension_attributes = extractExtensionAttributes(general_extension_attributes_raw),
+        purchasing_extension_attributes_raw = Table.ExpandRecordColumn(Table.SelectColumns(source, {"id", "purchasing"}),"purchasing", {"extensionAttributes"}),
+        purchasing_extension_attributes = extractExtensionAttributes(purchasing_extension_attributes_raw),
+        user_and_location_extension_attributes_raw = Table.ExpandRecordColumn(Table.SelectColumns(source, {"id", "userAndLocation"}),"userAndLocation", {"extensionAttributes"}),
+        user_and_location_extension_attributes = extractExtensionAttributes(user_and_location_extension_attributes_raw),
+        hardware_extension_attributes_raw = Table.ExpandRecordColumn(Table.SelectColumns(source, {"id", "hardware"}),"hardware", {"extensionAttributes"}),
+        hardware_extension_attributes = extractExtensionAttributes(hardware_extension_attributes_raw),
+        operating_system_extension_attributes_raw = Table.ExpandRecordColumn(Table.SelectColumns(source, {"id", "operatingSystem"}),"operatingSystem", {"extensionAttributes"}),
+        operating_system_extension_attributes = extractExtensionAttributes(operating_system_extension_attributes_raw),
+        extension_attributes_raw = Table.SelectColumns(source, {"id", "extensionAttributes"}),
+        extension_attributes = extractExtensionAttributes(extension_attributes_raw),
+        table = Table.Combine({general_extension_attributes, purchasing_extension_attributes, user_and_location_extension_attributes, hardware_extension_attributes, operating_system_extension_attributes, extension_attributes})
+        
+    in
+        table;
 
 initializeMobileRecord = (url as text) as any =>
 let
@@ -57,7 +214,7 @@ initializeComputerGroupRecord = (url as text) as any =>
        computerGroups=Json.Document(response),
        computerGroupsJson=Table.FromRecords(computerGroups[computer_groups]),
        computerGroupsModified=Table.AddColumn(computerGroupsJson,"computerGroupDetails", each GetComputerGroupDetails([id],url)),
-      return_record=Record.Combine({[computerGroups=computerGroupsModified]})
+       return_record=Record.Combine({[computerGroups=computerGroupsModified]})
 
     in
         return_record;
@@ -70,7 +227,7 @@ initializeMobileGroupRecord = (url as text) as any =>
        deviceGroupsModified=Table.AddColumn(deviceGroups,"mobileDeviceGroupDetails", each GetMobileDeviceGroupDetails([id],url)),
       return_record=Record.Combine({[deviceGroups=deviceGroupsModified]})
     in
-        return_record;
+        response;
 
 
 
@@ -96,6 +253,17 @@ BasicAuthorizationHeader = () =>
     in
         value;
 
+TokenAuthorizationHeader = (baseurl as text) =>
+    let
+        token = Json.Document( Web.Contents( baseurl, [
+            Headers = [],
+            RelativePath = "/uapi/auth/tokens",
+            Content = Text.ToBinary("")
+        ]))[token],
+        token_header = "Bearer " & token
+    in
+        token_header;
+
 JSSResource = (baseurl as text, relativepath as text) =>
     let source = Web.Contents(baseurl & "/JSSResource",
         [
@@ -108,6 +276,19 @@ JSSResource = (baseurl as text, relativepath as text) =>
         source;
 
 
+UAPIResource = (baseurl as text, relativepath as text) =>
+    let
+        source = Json.Document(Web.Contents(baseurl & "/uapi",
+        [
+            Headers = [
+                #"Accept" = "application/json",
+                #"Authorization" = TokenAuthorizationHeader(baseurl)
+            ],
+            RelativePath = relativepath,
+            Timeout = Duration.FromText("01:00:00.0")
+        ]))
+    in
+        source;
 GetJssResource = (id as number, baseurl as text,path as text) as any =>
     let
         response = JSSResource(baseurl,path & Number.ToText(id)),
