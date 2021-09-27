@@ -16,18 +16,18 @@ JamfNavTable=(jamfUrl as text) as table =>
 LegacyAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
-        temp_table=initializeGlobalRecord(url),
-        temp_mobile_devices=initializeMobileRecord(url),
-        temp_mobile_devices_group=initializeMobileGroupRecord(url),
-        temp_comp_group=initializeComputerGroupRecord(url),
+        temp_table=legacyInitializeGlobalRecord(url),
+        temp_mobile_devices=legacyInitializeMobileRecord(url),
+        temp_mobile_devices_group=legacyInitializeMobileGroupRecord(url),
+        temp_comp_group=legacyInitializeComputerGroupRecord(url),
         source = #table({"Name", "Data", "ItemKind", "ItemName", "IsLeaf"}, {
-                    { "Computers", ComputersImpl(temp_table[computers]), "Table", "Table", true },
+                    { "Computers", legacyComputersImpl(temp_table[computers]), "Table", "Table", true },
                     { "Mobile Devices", MobileDevicesImpl(temp_mobile_devices[mobileDevices]), "Table", "Table", true },
                     { "Computer Device Groups", ComputerGroupsImpl(temp_comp_group[computerGroups]), "Table", "Table", true },
                     { "Mobile Device Groups", MobileDevicesGroupsImpl(temp_mobile_devices_group[deviceGroups]), "Table", "Table", true },
                     {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
-                    {"Computers - Extension attributes",ExtensionAttributes(temp_table[computers]),"Table","Table",true},
-                    {"Computers - Applications",ComputerApplicationsImpl(temp_table[computerApps]),"Table","Table",true},
+                    {"Computers - Extension attributes",legacyExtensionAttributes(temp_table[computers]),"Table","Table",true},
+                    {"Computers - Applications",legacyComputerApplicationsImpl(temp_table[computerApps]),"Table","Table",true},
                     {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -37,15 +37,31 @@ LegacyAPINavTable = (jamfUrl as text) as table =>
 UAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
-        table = Table.FromRecords(UAPIResource(jamfUrl, "/v1/computers-inventory")[results])
+        temp_table = initializeGlobalRecord(jamfUrl),
+        temp_mobile_devices = legacyInitializeMobileRecord(url),
+        temp_mobile_devices_group = legacyInitializeMobileGroupRecord(url),
+        temp_comp_group = legacyInitializeComputerGroupRecord(url),
+        source = #table({"Name", "Data", "ItemKind", "ItemName", "IsLeaf"}, {
+            { "Computers", computersImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Mobile Devices", MobileDevicesImpl(temp_mobile_devices[mobileDevices]), "Table", "Table", true },
+            { "Computer Device Groups", ComputerGroupsImpl(temp_comp_group[computerGroups]), "Table", "Table", true },
+            { "Mobile Device Groups", MobileDevicesGroupsImpl(temp_mobile_devices_group[deviceGroups]), "Table", "Table", true },
+            {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
+            {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
+            {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
+            {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
+        }),
+        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
+        test = extensionAttributes(url, temp_table)
+        
         
     in
-        table;
+        navTable;
 
 ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
 
 
-initializeGlobalRecord = (url as text) as any =>
+legacyInitializeGlobalRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/computers"),
        jsonComputers=Json.Document(response),
@@ -56,7 +72,25 @@ let
 in
         return_record;
 
-initializeMobileRecord = (url as text) as any =>
+/*
+Creates a table of pages to be used as reference for future queries to the /v1/computers-inventory endpoint
+
+note: Uses 100 devices per page as default
+*/
+initializeGlobalRecord = (url as text) as any =>
+    let
+        devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
+        // We divide by 100 since the default amount per page is 100
+        pageSize = 10,
+        pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
+        //pages = 3,
+        page_list = {1..pages},
+        // Text.From is used to convert the Numbers to Text for the Table
+        table = Table.FromList(List.Transform(page_list, Text.From))
+    in
+        table;
+
+legacyInitializeMobileRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/mobiledevices"),
        jsonDevices=Json.Document(response),
@@ -66,7 +100,7 @@ let
 in
         return_record;
 
-initializeComputerGroupRecord = (url as text) as any =>
+legacyInitializeComputerGroupRecord = (url as text) as any =>
     let
         response = JSSResource(url, "/computergroups"),
        computerGroups=Json.Document(response),
@@ -77,7 +111,7 @@ initializeComputerGroupRecord = (url as text) as any =>
     in
         return_record;
 
-initializeMobileGroupRecord = (url as text) as any =>
+legacyInitializeMobileGroupRecord = (url as text) as any =>
     let
        response = JSSResource(url, "/mobiledevicegroups"),
        jsonDevicesGroups=Json.Document(response),
@@ -287,13 +321,31 @@ GetComputerAttributes = (id as number,baseurl as text) as any =>
     in
         result;
 
-ComputerApplicationsImpl = (ComputerApps as table) as table =>
+legacyComputerApplicationsImpl = (ComputerApps as table) as table =>
     let
          #"Expanded computerDetails" = Table.ExpandRecordColumn(ComputerApps, "computerDetails", {"computerApplications"}, {"computerDetails.computerApplications"}),
     #"Expanded computerDetails.computerApplications" = Table.ExpandListColumn(#"Expanded computerDetails", "computerDetails.computerApplications"),
     #"Expanded computerDetails.computerApplications1" = Table.ExpandRecordColumn(#"Expanded computerDetails.computerApplications", "computerDetails.computerApplications", {"name", "path", "version"}, {"computerDetails.computerApplications.name", "computerDetails.computerApplications.path", "computerDetails.computerApplications.version"})
 in
     #"Expanded computerDetails.computerApplications1";
+
+computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = {
+            "Applications"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 10,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "applications"}),
+        expand_applications = Table.ExpandListColumn(selected_table, "applications"),
+        filtered_table = Table.SelectRows(expand_applications, each [applications] <> null),
+        expand_applications2 = Table.ExpandRecordColumn(filtered_table, "applications", {"name", "path", "version", "macAppStore", "sizeMegabytes", "bundleId", "updateAvailable", "externalVersionId"})
+    in
+        expand_applications2;
 
 
  MobileApplicationsImpl = (MobileApps as table) as table =>
@@ -304,7 +356,7 @@ in
 in
     #"Expanded mobileDeviceDetails.mdApps1";
 
-ExtensionAttributes = (computersModified as table) as table =>
+legacyExtensionAttributes = (computersModified as table) as table =>
     let    
 
         #"Expanded computerDetails" = Table.ExpandRecordColumn(computersModified, "computerDetails", {"extAttrs"}, {"computerDetails.extAttrs"}),
@@ -312,6 +364,41 @@ ExtensionAttributes = (computersModified as table) as table =>
     #"Expanded computerDetails.extAttrs1" = Table.ExpandRecordColumn(#"Expanded computerDetails.extAttrs", "computerDetails.extAttrs", {"id", "name", "type", "value"}, {"computerDetails.extAttrs.id", "computerDetails.extAttrs.name", "computerDetails.extAttrs.type", "computerDetails.extAttrs.value"})
 in
     #"Expanded computerDetails.extAttrs1";
+
+extensionAttributes = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = {
+            "General",
+            "Hardware",
+            "Operating_System",
+            "User_And_Location",
+            "Purchasing",
+            "Extension_Attributes"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 10,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "general", "hardware", "operatingSystem", "userAndLocation", "purchasing", "diskEncryption"}),
+        general_table = Table.SelectColumns(selected_table, {"id", "general"}),
+        general_expanded = Table.ExpandRecordColumn(general_table, "general", {"extensionAttributes"}),
+        purchasing_table = Table.SelectColumns(selected_table, {"id", "purchasing"}),
+        purchasing_expanded = Table.ExpandRecordColumn(purchasing_table, "purchasing", {"extensionAttributes"}),
+        user_and_location_table = Table.SelectColumns(selected_table, {"id", "userAndLocation"}),
+        user_and_location_expanded = Table.ExpandRecordColumn(user_and_location_table, "userAndLocation", {"extensionAttributes"}),
+        operating_system_table = Table.SelectColumns(selected_table, {"id", "operatingSystem"}),
+        operating_system_expanded = Table.ExpandRecordColumn(operating_system_table, "operatingSystem", {"extensionAttributes"}),
+        hardware_table = Table.SelectColumns(selected_table, {"id", "hardware"}),
+        hardware_expanded = Table.ExpandRecordColumn(hardware_table, "hardware", {"extensionAttributes"}),
+        temp_ea_table = Table.SelectColumns(computer_table, {"id", "extensionAttributes"}),
+        joined_ea_table = Table.Combine({temp_ea_table, general_expanded, purchasing_expanded, user_and_location_expanded, operating_system_expanded, hardware_expanded}),
+        ea_expanded = Table.ExpandListColumn(joined_ea_table, "extensionAttributes"),
+        ea_expanded2 = Table.ExpandRecordColumn(ea_expanded, "extensionAttributes", {"definitionId", "name", "description", "values"}, {"definitionId", "name", "description", "value"}),
+        ea_transformed = Table.TransformColumns(ea_expanded2, {"value", List.First})
+    in
+        ea_transformed;
 
 MdExtensionAttributes= (mobileDevices as table) as table =>
 let
@@ -321,7 +408,7 @@ let
 in
     #"Expanded mobileDeviceDetails.extAttrs1";
 
-ComputersImpl = (basetable as table) as table =>
+legacyComputersImpl = (basetable as table) as table =>
 let     
     #"Expanded computerDetails" = Table.ExpandRecordColumn(basetable, "computerDetails", {"id", "name", "mac_address", "alt_mac_address", "ip_address", "country_name", "last_reported_ip", "serial_number", "udid", "jamf_version", "platform", "barcode_1", "barcode_2", "asset_tag", "remote_management", "mdm_capable", "mdm_capable_users", "management_status", "report_date", "report_date_epoch", "report_date_utc", "last_contact_time", "last_contact_time_epoch", "last_contact_time_utc", "initial_entry_date", "initial_entry_date_epoch", "initial_entry_date_utc", "last_cloud_backup_date_epoch", "last_cloud_backup_date_utc", "last_enrolled_date_epoch", "last_enrolled_date_utc", "distribution_point", "sus", "netboot_server", "site", "itunes_store_account_is_active", "username", "realname", "real_name", "email_address", "position", "phone", "phone_number", "department", "building", "room", "is_purchased", "is_leased", "po_number", "vendor", "applecare_id", "purchase_price", "purchasing_account", "po_date", "po_date_epoch", "po_date_utc", "warranty_expires", "warranty_expires_epoch", "warranty_expires_utc", "lease_expires", "lease_expires_epoch", "lease_expires_utc", "life_expectancy", "purchasing_contact", "os_applecare_id", "os_maintenance_expires", "attachments", "make", "model", "model_identifier", "os_name", "os_version", "os_build", "master_password_set", "active_directory_status", "service_pack", "processor_type", "processor_architecture", "processor_speed", "processor_speed_mhz", "number_processors", "number_cores", "total_ram", "total_ram_mb", "boot_rom", "bus_speed", "bus_speed_mhz", "battery_capacity", "cache_size", "cache_size_kb", "available_ram_slots", "optical_drive", "nic_speed", "smc_version", "ble_capable", "sip_status", "gatekeeper_status", "xprotect_version", "institutional_recovery_key", "disk_encryption_configuration", "filevault2_users", "storage", "mapped_printers"}, {"computerDetails.id", "computerDetails.name", "computerDetails.mac_address", "computerDetails.alt_mac_address", "computerDetails.ip_address", "computerDetails.country_name", "computerDetails.last_reported_ip", "computerDetails.serial_number", "computerDetails.udid", "computerDetails.jamf_version", "computerDetails.platform", "computerDetails.barcode_1", "computerDetails.barcode_2", "computerDetails.asset_tag", "computerDetails.remote_management", "computerDetails.mdm_capable", "computerDetails.mdm_capable_users", "computerDetails.management_status", "computerDetails.report_date", "computerDetails.report_date_epoch", "computerDetails.report_date_utc", "computerDetails.last_contact_time", "computerDetails.last_contact_time_epoch", "computerDetails.last_contact_time_utc", "computerDetails.initial_entry_date", "computerDetails.initial_entry_date_epoch", "computerDetails.initial_entry_date_utc", "computerDetails.last_cloud_backup_date_epoch", "computerDetails.last_cloud_backup_date_utc", "computerDetails.last_enrolled_date_epoch", "computerDetails.last_enrolled_date_utc", "computerDetails.distribution_point", "computerDetails.sus", "computerDetails.netboot_server", "computerDetails.site", "computerDetails.itunes_store_account_is_active", "computerDetails.username", "computerDetails.realname", "computerDetails.real_name", "computerDetails.email_address", "computerDetails.position", "computerDetails.phone", "computerDetails.phone_number", "computerDetails.department", "computerDetails.building", "computerDetails.room", "computerDetails.is_purchased", "computerDetails.is_leased", "computerDetails.po_number", "computerDetails.vendor", "computerDetails.applecare_id", "computerDetails.purchase_price", "computerDetails.purchasing_account", "computerDetails.po_date", "computerDetails.po_date_epoch", "computerDetails.po_date_utc", "computerDetails.warranty_expires", "computerDetails.warranty_expires_epoch", "computerDetails.warranty_expires_utc", "computerDetails.lease_expires", "computerDetails.lease_expires_epoch", "computerDetails.lease_expires_utc", "computerDetails.life_expectancy", "computerDetails.purchasing_contact", "computerDetails.os_applecare_id", "computerDetails.os_maintenance_expires", "computerDetails.attachments", "computerDetails.make", "computerDetails.model", "computerDetails.model_identifier", "computerDetails.os_name", "computerDetails.os_version", "computerDetails.os_build", "computerDetails.master_password_set", "computerDetails.active_directory_status", "computerDetails.service_pack", "computerDetails.processor_type", "computerDetails.processor_architecture", "computerDetails.processor_speed", "computerDetails.processor_speed_mhz", "computerDetails.number_processors", "computerDetails.number_cores", "computerDetails.total_ram", "computerDetails.total_ram_mb", "computerDetails.boot_rom", "computerDetails.bus_speed", "computerDetails.bus_speed_mhz", "computerDetails.battery_capacity", "computerDetails.cache_size", "computerDetails.cache_size_kb", "computerDetails.available_ram_slots", "computerDetails.optical_drive", "computerDetails.nic_speed", "computerDetails.smc_version", "computerDetails.ble_capable", "computerDetails.sip_status", "computerDetails.gatekeeper_status", "computerDetails.xprotect_version", "computerDetails.institutional_recovery_key", "computerDetails.disk_encryption_configuration", "computerDetails.filevault2_users", "computerDetails.storage", "computerDetails.mapped_printers"}),
     #"Removed Columns" = Table.RemoveColumns(#"Expanded computerDetails",{"computerDetails.id", "computerDetails.name"}),
@@ -331,6 +418,38 @@ let
     computersFinal = Table.RemoveColumns(#"Extracted Values",{"computerDetails.storage"})
 in
     computersFinal;
+
+/*
+This function accepts a table that has the specific pages to be used to build the table. Expands the needed columns and returns the modified table of computers back.
+
+note: Uses the specific sections of the Jamf Pro UAPI's /v1/computers-inventory to properly grab the needed sections.
+*/
+computersImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        
+        sections = {
+            "General",
+            "Hardware",
+            "Operating_System",
+            "User_And_Location",
+            "Purchasing",
+            "Disk_Encryption"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 10,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "general", "hardware", "operatingSystem", "userAndLocation", "purchasing", "diskEncryption"}),
+        expand_general = Table.ExpandRecordColumn(selected_table, "general", {"name","lastIpAddress","lastReportedIp","jamfBinaryVersion","platform","barcode1","barcode2","assetTag","remoteManagement","supervised","mdmCapable","reportDate","lastContactTime","lastCloudBackupDate","lastEnrolledDate","mdmProfileExpiration","initialEntryDate","distributionPoint","site","itunesStoreAccountActive","enrolledViaAutomatedDeviceEnrollment","userApprovedMdm","enrollmentMethod"}),
+        expand_disk_encryption = Table.ExpandRecordColumn(expand_general, "diskEncryption", {"individualRecoveryKeyValidityStatus","institutionalRecoveryKeyPresent","diskEncryptionConfigurationName","fileVault2EligibilityMessage","fileVault2EnabledUserNames","bootPartitionEncryptionDetails"}),
+        expand_purchasing = Table.ExpandRecordColumn(expand_disk_encryption, "purchasing", {"purchased","leased","poNumber","lifeExpectancy","purchasePrice","purchasingAccount","purchasingContact","appleCareId","vendor","leaseDate","poDate","warrantyDate"}),
+        expand_user_and_location = Table.ExpandRecordColumn(expand_purchasing, "userAndLocation", {"username","realname","email","position","phone","departmentId","buildingId","room"}),
+        expand_hardware = Table.ExpandRecordColumn(expand_user_and_location, "hardware", {"make","model","modelIdentifier","serialNumber","processorSpeedMhz","processorCount","coreCount","processorType","processorArchitecture","busSpeedMhz","cacheSizeKilobytes","networkAdapterType","macAddress","altNetworkAdapterType","altMacAddress","totalRamMegabytes","openRamSlots","batteryCapacityPercent","smcVersion","nicSpeed","opticalDrive","bootRom","bleCapable","supportsIosAppInstalls","appleSilicon"}),
+        expand_operating_system = Table.ExpandRecordColumn(expand_hardware, "operatingSystem", {"name","version","build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"}, {"os name","os version","os build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"})
+    in
+        expand_operating_system;
        
        
     
