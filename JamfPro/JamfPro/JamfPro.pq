@@ -1,4 +1,4 @@
-﻿[version="1.0.0"]
+﻿[version="1.1.0"]
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
@@ -7,6 +7,13 @@ JamfPro__url="";
 
 
 JamfNavTable=(jamfUrl as text) as table =>
+    let
+        source = LegacyAPINavTable(jamfUrl),
+        newSource = UAPINavTable(jamfUrl)
+    in
+        newSource;
+
+LegacyAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
         temp_table=initializeGlobalRecord(url),
@@ -26,6 +33,14 @@ JamfNavTable=(jamfUrl as text) as table =>
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
     in
         navTable;
+
+UAPINavTable = (jamfUrl as text) as table =>
+    let
+        url = ValidateUrlScheme(jamfUrl)
+        
+        
+    in
+        url;
 
 ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
 
@@ -106,6 +121,68 @@ JSSResource = (baseurl as text, relativepath as text) =>
         ])
     in
         source;
+
+// This handles the request to API endpoints
+UAPIResource = (baseurl as text, relativepath as text,optional token as text, optional attempts as number) =>
+    let
+        // define possible errors
+        num_attempts = if attempts = null then 1 else (attempts + 1),
+        errors.badRequest = Record.AddField(Error.Record("Bad Request", "this dataset does not exist.")),
+        errors.invalidAccessKey = Record.AddField(Error.Record("Invalid Access Key", "Make sure the provided access key is valid")),
+        errors.insufficientPermissions = Record.AddField(Error.Record("Insufficient Permissions", "You don't have permission")),
+        errors.resourceNotFound = Record.AddField(Error.Record("Page Does Not Exist", "This dataset does not exist")),
+        errors.tooManyRequests = Record.AddField(Error.Record("Too Many Requests", "You're reached your daily limit")),
+        errors.backendError = Record.AddField(Error.Record("Server Error", "There is unknown server error")),
+        errors.serviceUnavailable = Record.AddField(Error.Record("Service Unavailable", "The server is too busy")),
+
+        // Build an error table
+        error_records = {errors.badRequest, errors.invalidAccessKey, errors.insufficientPermissions, errors.resourceNotFound, errors.tooManyRequests, errors.serviceUnavailable},
+        errors.table = Table.FromRecords(error_records),
+
+        // get response
+        response = if token = null then Web.Contents(baseurl & "/uapi",
+        [
+            Headers = [
+                #"Accept" = "application/json",
+                #"Authorization" = TokenAuthorizationHeader(baseurl)
+            ],
+            RelativePath = relativepath,
+            Timeout = Duration.FromText("01:00:00.0"),
+            ManualStatusHandling = {429},
+            IsRetry = attempts <> null
+        ])
+        else Web.Contents(baseurl & "/uapi",
+        [
+            Headers = [
+                #"Accept" = "application/json",
+                #"Authorization" = token
+            ],
+            RelativePath = relativepath,
+            Timeout = Duration.FromText("01:00:00.0"),
+            ManualStatusHandling = {429},
+            IsRetry = attempts <> null
+        ]),
+
+        responseMetadata = Value.Metadata(response),
+        responseCode = responseMetadata[Response.Status],
+        responseHeaders = responseMetadata[Headers],
+
+        // Check to see if we got a response, if we didn't let's request it again
+        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, token, num_attempts), #duration(0,0,0,3)) else Json.Document(response)
+    in
+        json;
+
+TokenAuthorizationHeader = (baseurl as text) =>
+    let
+        token = Json.Document(Web.Contents(baseurl, [
+            Headers =[],
+            RelativePath = "/uapi/auth/tokens",
+            // Need to do a POST method
+            Content = Text.ToBinary("")
+        ]))[token],
+        token_header = "Bearer " & token
+    in
+        token_header;
 
 
 GetJssResource = (id as number, baseurl as text,path as text) as any =>
