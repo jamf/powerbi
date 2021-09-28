@@ -181,7 +181,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             ],
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
-            ManualStatusHandling = {429},
+            ManualStatusHandling = {429, 401},
             IsRetry = attempts <> null
         ])
         else Web.Contents(baseurl & "/uapi",
@@ -192,7 +192,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             ],
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
-            ManualStatusHandling = {429},
+            ManualStatusHandling = {429, 401},
             IsRetry = attempts <> null
         ]),
 
@@ -201,17 +201,18 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
         responseHeaders = responseMetadata[Headers],
 
         // Check to see if we got a response, if we didn't let's request it again
-        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, token, num_attempts), #duration(0,0,0,3)) else Json.Document(response)
+        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, TokenAuthorizationHeader(baseurl, true), num_attempts), #duration(0,0,0,3)) else Json.Document(response)
     in
         json;
 
-TokenAuthorizationHeader = (baseurl as text) =>
+TokenAuthorizationHeader = (baseurl as text, optional isRetry as logical) =>
     let
         token = Json.Document(Web.Contents(baseurl, [
             Headers =[],
             RelativePath = "/uapi/auth/tokens",
             // Need to do a POST method
-            Content = Text.ToBinary("")
+            Content = Text.ToBinary(""),
+            IsRetry = if isRetry <> null then isRetry else false
         ]))[token],
         token_header = "Bearer " & token
     in

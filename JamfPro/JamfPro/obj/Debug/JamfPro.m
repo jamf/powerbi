@@ -51,8 +51,7 @@ UAPINavTable = (jamfUrl as text) as table =>
             {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
             {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
-        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
-        test = extensionAttributes(url, temp_table)
+        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
         
         
     in
@@ -182,7 +181,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             ],
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
-            ManualStatusHandling = {429},
+            ManualStatusHandling = {429, 403, 401},
             IsRetry = attempts <> null
         ])
         else Web.Contents(baseurl & "/uapi",
@@ -212,7 +211,8 @@ TokenAuthorizationHeader = (baseurl as text) =>
             Headers =[],
             RelativePath = "/uapi/auth/tokens",
             // Need to do a POST method
-            Content = Text.ToBinary("")
+            Content = Text.ToBinary(""),
+            IsRetry = true
         ]))[token],
         token_header = "Bearer " & token
     in
