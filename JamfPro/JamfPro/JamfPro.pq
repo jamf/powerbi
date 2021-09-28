@@ -21,7 +21,6 @@ shared JamfPro.Contents =Value.ReplaceType(
                 Documentation.FieldCaption = "API Type",
                 Documentation.FieldDescription = "The type of API to be used.",
                 Documentation.AllowedValues = {"Legacy", "UAPI"}])) as text);
-JamfPro__url="";
 
 
 /*
@@ -305,17 +304,6 @@ GetComputerApps = (id as number,baseurl as text) as any =>
     in
         computerApps;
 
-GetMobileDeviceApps = (id as number,baseurl as text) as any =>
-    let 
-       jsonComputerDetails =GetJssResourceWithSuffix(id,baseurl,"/computers/id/","/subset/software"),
-        mobileDevice=jsonComputerDetails[mobile_device],
-        software=mobileDevice[software],
-        applications=software[applications],
-        computerApps=[mdApplications=applications]
-
-    in
-        computerApps;
-
 GetMobileDeviceDetails = (id as number,baseurl as text) as any =>
     let 
         jsonMDDetails = GetJssResource(id,baseurl,"/mobiledevices/id/"),
@@ -348,15 +336,6 @@ GetMobileDeviceGroupDetails = (id as number,baseurl as text) as any =>
         mdgroup=jsonMDGroupDetails[mobile_device_group],
         md_group=mdgroup[mobile_devices],
         result =[mdgroup=md_group]
-    in
-        result;
-
-GetComputerAttributes = (id as number,baseurl as text) as any =>
-    let 
-        jsonComputerDetails = GetJssResource(id,baseurl,"/computers/id/"),
-        computer=jsonComputerDetails[computer], 
-        extensionAttributes=computer[extension_attributes],
-        result =[extAttrs=extensionAttributes]
     in
         result;
 
@@ -522,14 +501,6 @@ ComputerGroupsImpl = (computerGroups as table) as table =>
     //#"Renamed Columns" = Table.RenameColumns(#"Removed Columns",{{"computerGroupDetails.computergroup.id", "computer_id"}, {"computerGroupDetails.computergroup.name", "computer_name"}})
 in
     #"Removed Columns";
-
-MobileDevicesApps = (baseurl as text) as table =>
-   let
-        response = JSSResource(baseurl, "/mobiledevicegroups"),
-       jsonDevicesGroups=Json.Document(response),
-       deviceGroups=Table.FromRecords(jsonDevicesGroups[mobile_device_groups])
-    in
-        deviceGroups;
 
 
 // Data Source Kind description
