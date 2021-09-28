@@ -193,7 +193,13 @@ JSSResource = (baseurl as text, relativepath as text) =>
     in
         source;
 
-// This handles the request to API endpoints
+/*
+This function accepts a base URL which is the Jamf instance, and uses the relative path for the API endpoint.
+Additionally the token can be provided to use that specific one, and the attempts that have been made.
+
+The attempts and token parameters are used by the error handling to attempt again during some unstable
+connectivity periods and handle the 401 which might occur if the token becomes invalidated during data retrieval.
+*/
 UAPIResource = (baseurl as text, relativepath as text,optional token as text, optional attempts as number) =>
     let
         // define possible errors
@@ -243,6 +249,11 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
     in
         json;
 
+
+/*
+This will generate a token bearer header string. This is called upon to geneate a token header, but if
+isRetry is passed,it will bypass cached credentials and force a new token to be generated.
+*/
 TokenAuthorizationHeader = (baseurl as text, optional isRetry as logical) =>
     let
         token = Json.Document(Web.Contents(baseurl, [
@@ -283,12 +294,6 @@ GetComputerDetails = (id as number,baseurl as text) as any =>
         hardware=computer[hardware],
         extensionAttributes=computer[extension_attributes],
         extAttrRec=[extAttrs=extensionAttributes],
-       //extensionAttributes_modified=Record.RenameFields(extensionAttributes,{{"id","extensionAttr_id"},{"name","extensionAttr_name"},{"type","extensionAttr_type"},{"value","extensionAttr_value"}}),
-  //    geoLocation=Json.Document(Web.Contents("http://192.168.2.11:3001/address/" & Record.Field(general,"ip_address") ,[
-    //           Headers = [
-     //          #"Accept" = "application/json"
-    //       ]
-    //  ])),
         result = Record.Combine({general,location,purchasing,hardware,extAttrRec})
     in
         result;
