@@ -120,8 +120,8 @@ initializeGlobalRecord = (url as text) as any =>
 
         // Comment out the logic to grab the full number of devices if your instance is large, and uncomment
         // The specific setting for pages to reduce dev time.
-        //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
-        pages = 3,
+        pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
+        //pages = 3,
         page_list = {1..pages},
         // Text.From is used to convert the Numbers to Text for the Table
         table = Table.FromList(List.Transform(page_list, Text.From))
