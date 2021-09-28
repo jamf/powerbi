@@ -2,17 +2,42 @@
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
-shared JamfPro.Contents =Value.ReplaceType(JamfNavTable, type function (url as text) as any);
+
+/*
+This is the shared function which the query calls on
+
+This accepts a URL in the form of text, and asks for the type of UAPI.
+*/
+shared JamfPro.Contents =Value.ReplaceType(
+    JamfNavTable,
+    type function (
+        jamfUrl as (
+            type text meta [
+                Documentation.FieldCaption = "Jamf Instance URL",
+                Documentation.FieldDescription = "The Jamf URL for your specific instance. This is the same one you use to log into your instance.",
+                Documentation.FieldSampleValues = {"https://acme.jamfcloud.com"}]),
+        apiType as (
+            type text meta [
+                Documentation.FieldCaption = "API Type",
+                Documentation.FieldDescription = "The type of API to be used.",
+                Documentation.AllowedValues = {"Legacy", "UAPI"}])) as text);
 JamfPro__url="";
 
 
-JamfNavTable=(jamfUrl as text) as table =>
-    let
-        source = LegacyAPINavTable(jamfUrl),
-        newSource = UAPINavTable(jamfUrl)
-    in
-        newSource;
+/*
+This is a function which is just a proxy to the actual nav table being built. This determines if the user wants UAPI or Legacy.
 
+This is called by JamfPro.Contents
+*/
+JamfNavTable=(jamfUrl as text, apiType as text) as table =>
+    let
+        source = if apiType = "UAPI" then UAPINavTable(jamfUrl) else LegacyAPINavTable(jamfUrl)
+    in
+        source;
+
+/*
+This function handles the creation of the Nav table using the legacy API. This uses Basic Auth and can be slow for bigger instances.
+*/
 LegacyAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
@@ -34,6 +59,11 @@ LegacyAPINavTable = (jamfUrl as text) as table =>
     in
         navTable;
 
+/*
+This function handles the creation of the Nav table using the UAPI which Jamf is moving to. This uses Basic Auth and Bearer token where possible.
+
+note: This still uses some legacy endpoints. This will be updated as Jamf adds the needed endpoints.
+*/
 UAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
@@ -57,9 +87,15 @@ UAPINavTable = (jamfUrl as text) as table =>
     in
         navTable;
 
+/*
+This validates if the provided URL is in the correct format.
+*/
 ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
 
 
+/*
+This initializes the table to be used globally for the LegacyAPINavTable.
+*/
 legacyInitializeGlobalRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/computers"),
@@ -80,15 +116,18 @@ initializeGlobalRecord = (url as text) as any =>
     let
         devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
         // We divide by 100 since the default amount per page is 100
-        pageSize = 10,
-        pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
-        //pages = 3,
+        pageSize = 100,
+        //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
+        pages = 3,
         page_list = {1..pages},
         // Text.From is used to convert the Numbers to Text for the Table
         table = Table.FromList(List.Transform(page_list, Text.From))
     in
         table;
 
+/*
+This uses legacy endpoints to obtain mobile records and returns them.
+*/
 legacyInitializeMobileRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/mobiledevices"),

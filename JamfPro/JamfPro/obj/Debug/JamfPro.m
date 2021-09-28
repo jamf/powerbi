@@ -2,16 +2,27 @@
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
-shared JamfPro.Contents =Value.ReplaceType(JamfNavTable, type function (url as text) as any);
+shared JamfPro.Contents =Value.ReplaceType(
+    JamfNavTable,
+    type function (
+        jamfUrl as (
+            type text meta [
+                Documentation.FieldCaption = "Jamf Instance URL",
+                Documentation.FieldDescription = "The Jamf URL for your specific instance. This is the same one you use to log into your instance.",
+                Documentation.FieldSampleValues = {"https://acme.jamfcloud.com"}]),
+        apiType as (
+            type text meta [
+                Documentation.FieldCaption = "API Type",
+                Documentation.FieldDescription = "The type of API to be used.",
+                Documentation.AllowedValues = {"Legacy", "UAPI"}])) as text);
 JamfPro__url="";
 
 
-JamfNavTable=(jamfUrl as text) as table =>
+JamfNavTable=(jamfUrl as text, apiType as text) as table =>
     let
-        source = LegacyAPINavTable(jamfUrl),
-        newSource = UAPINavTable(jamfUrl)
+        source = if apiType = "UAPI" then UAPINavTable(jamfUrl) else LegacyAPINavTable(jamfUrl)
     in
-        newSource;
+        source;
 
 LegacyAPINavTable = (jamfUrl as text) as table =>
     let
@@ -80,9 +91,9 @@ initializeGlobalRecord = (url as text) as any =>
     let
         devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
         // We divide by 100 since the default amount per page is 100
-        pageSize = 10,
-        pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
-        //pages = 3,
+        pageSize = 100,
+        //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
+        pages = 3,
         page_list = {1..pages},
         // Text.From is used to convert the Numbers to Text for the Table
         table = Table.FromList(List.Transform(page_list, Text.From))
@@ -181,7 +192,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             ],
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
-            ManualStatusHandling = {429, 403, 401},
+            ManualStatusHandling = {429, 401},
             IsRetry = attempts <> null
         ])
         else Web.Contents(baseurl & "/uapi",
@@ -192,7 +203,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             ],
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
-            ManualStatusHandling = {429},
+            ManualStatusHandling = {429, 401},
             IsRetry = attempts <> null
         ]),
 
@@ -201,18 +212,18 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
         responseHeaders = responseMetadata[Headers],
 
         // Check to see if we got a response, if we didn't let's request it again
-        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, token, num_attempts), #duration(0,0,0,3)) else Json.Document(response)
+        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, TokenAuthorizationHeader(baseurl, true), num_attempts), #duration(0,0,0,3)) else Json.Document(response)
     in
         json;
 
-TokenAuthorizationHeader = (baseurl as text) =>
+TokenAuthorizationHeader = (baseurl as text, optional isRetry as logical) =>
     let
         token = Json.Document(Web.Contents(baseurl, [
             Headers =[],
             RelativePath = "/uapi/auth/tokens",
             // Need to do a POST method
             Content = Text.ToBinary(""),
-            IsRetry = true
+            IsRetry = if isRetry <> null then isRetry else false
         ]))[token],
         token_header = "Bearer " & token
     in
