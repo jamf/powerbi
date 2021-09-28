@@ -2,6 +2,12 @@
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
+
+/*
+This is the shared function which the query calls on
+
+This accepts a URL in the form of text, and asks for the type of UAPI.
+*/
 shared JamfPro.Contents =Value.ReplaceType(
     JamfNavTable,
     type function (
@@ -15,15 +21,22 @@ shared JamfPro.Contents =Value.ReplaceType(
                 Documentation.FieldCaption = "API Type",
                 Documentation.FieldDescription = "The type of API to be used.",
                 Documentation.AllowedValues = {"Legacy", "UAPI"}])) as text);
-JamfPro__url="";
 
 
+/*
+This is a function which is just a proxy to the actual nav table being built. This determines if the user wants UAPI or Legacy.
+
+This is called by JamfPro.Contents
+*/
 JamfNavTable=(jamfUrl as text, apiType as text) as table =>
     let
         source = if apiType = "UAPI" then UAPINavTable(jamfUrl) else LegacyAPINavTable(jamfUrl)
     in
         source;
 
+/*
+This function handles the creation of the Nav table using the legacy API. This uses Basic Auth and can be slow for bigger instances.
+*/
 LegacyAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
@@ -45,6 +58,11 @@ LegacyAPINavTable = (jamfUrl as text) as table =>
     in
         navTable;
 
+/*
+This function handles the creation of the Nav table using the UAPI which Jamf is moving to. This uses Basic Auth and Bearer token where possible.
+
+note: This still uses some legacy endpoints. This will be updated as Jamf adds the needed endpoints.
+*/
 UAPINavTable = (jamfUrl as text) as table =>
     let
         url = ValidateUrlScheme(jamfUrl),
@@ -60,6 +78,7 @@ UAPINavTable = (jamfUrl as text) as table =>
             {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
             {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
             {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
+            {"Computers - Configuration Profiles", computerConfigurationProfilesImpl(url, temp_table), "Table", "Table", true},
             {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -68,9 +87,15 @@ UAPINavTable = (jamfUrl as text) as table =>
     in
         navTable;
 
+/*
+This validates if the provided URL is in the correct format.
+*/
 ValidateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
 
 
+/*
+This initializes the table to be used globally for the LegacyAPINavTable.
+*/
 legacyInitializeGlobalRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/computers"),
@@ -92,6 +117,9 @@ initializeGlobalRecord = (url as text) as any =>
         devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
         // We divide by 100 since the default amount per page is 100
         pageSize = 100,
+
+        // Comment out the logic to grab the full number of devices if your instance is large, and uncomment
+        // The specific setting for pages to reduce dev time.
         //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
         pages = 3,
         page_list = {1..pages},
@@ -100,6 +128,9 @@ initializeGlobalRecord = (url as text) as any =>
     in
         table;
 
+/*
+This uses legacy endpoints to obtain mobile records and returns them.
+*/
 legacyInitializeMobileRecord = (url as text) as any =>
 let
         response = JSSResource(url, "/mobiledevices"),
@@ -166,7 +197,13 @@ JSSResource = (baseurl as text, relativepath as text) =>
     in
         source;
 
-// This handles the request to API endpoints
+/*
+This function accepts a base URL which is the Jamf instance, and uses the relative path for the API endpoint.
+Additionally the token can be provided to use that specific one, and the attempts that have been made.
+
+The attempts and token parameters are used by the error handling to attempt again during some unstable
+connectivity periods and handle the 401 which might occur if the token becomes invalidated during data retrieval.
+*/
 UAPIResource = (baseurl as text, relativepath as text,optional token as text, optional attempts as number) =>
     let
         // define possible errors
@@ -216,6 +253,11 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
     in
         json;
 
+
+/*
+This will generate a token bearer header string. This is called upon to geneate a token header, but if
+isRetry is passed,it will bypass cached credentials and force a new token to be generated.
+*/
 TokenAuthorizationHeader = (baseurl as text, optional isRetry as logical) =>
     let
         token = Json.Document(Web.Contents(baseurl, [
@@ -256,12 +298,6 @@ GetComputerDetails = (id as number,baseurl as text) as any =>
         hardware=computer[hardware],
         extensionAttributes=computer[extension_attributes],
         extAttrRec=[extAttrs=extensionAttributes],
-       //extensionAttributes_modified=Record.RenameFields(extensionAttributes,{{"id","extensionAttr_id"},{"name","extensionAttr_name"},{"type","extensionAttr_type"},{"value","extensionAttr_value"}}),
-  //    geoLocation=Json.Document(Web.Contents("http://192.168.2.11:3001/address/" & Record.Field(general,"ip_address") ,[
-    //           Headers = [
-     //          #"Accept" = "application/json"
-    //       ]
-    //  ])),
         result = Record.Combine({general,location,purchasing,hardware,extAttrRec})
     in
         result;
@@ -273,17 +309,6 @@ GetComputerApps = (id as number,baseurl as text) as any =>
         software=computer[software],
         applications=software[applications],
         computerApps=[computerApplications=applications]
-
-    in
-        computerApps;
-
-GetMobileDeviceApps = (id as number,baseurl as text) as any =>
-    let 
-       jsonComputerDetails =GetJssResourceWithSuffix(id,baseurl,"/computers/id/","/subset/software"),
-        mobileDevice=jsonComputerDetails[mobile_device],
-        software=mobileDevice[software],
-        applications=software[applications],
-        computerApps=[mdApplications=applications]
 
     in
         computerApps;
@@ -323,15 +348,6 @@ GetMobileDeviceGroupDetails = (id as number,baseurl as text) as any =>
     in
         result;
 
-GetComputerAttributes = (id as number,baseurl as text) as any =>
-    let 
-        jsonComputerDetails = GetJssResource(id,baseurl,"/computers/id/"),
-        computer=jsonComputerDetails[computer], 
-        extensionAttributes=computer[extension_attributes],
-        result =[extAttrs=extensionAttributes]
-    in
-        result;
-
 legacyComputerApplicationsImpl = (ComputerApps as table) as table =>
     let
          #"Expanded computerDetails" = Table.ExpandRecordColumn(ComputerApps, "computerDetails", {"computerApplications"}, {"computerDetails.computerApplications"}),
@@ -347,7 +363,7 @@ computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
@@ -357,6 +373,24 @@ computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
         expand_applications2 = Table.ExpandRecordColumn(filtered_table, "applications", {"name", "path", "version", "macAppStore", "sizeMegabytes", "bundleId", "updateAvailable", "externalVersionId"})
     in
         expand_applications2;
+
+computerConfigurationProfilesImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = {
+            "Configuration_Profiles"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 100,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "configurationProfiles"}),
+        expand_profiles = Table.ExpandListColumn(selected_table, "configurationProfiles"),
+        filtered_table = Table.SelectRows(expand_profiles, each [configurationProfiles] <> null),
+        expand_profiles2 = Table.ExpandRecordColumn(filtered_table, "configurationProfiles", {"id", "username", "lastInstalled", "removable", "displayName", "profileIdentifier"}, {"profileId", "username", "lastInstalled", "removable", "displayName", "profileIdentifier"})
+    in
+        expand_profiles2;
 
 
  MobileApplicationsImpl = (MobileApps as table) as table =>
@@ -388,7 +422,7 @@ extensionAttributes = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
@@ -448,7 +482,7 @@ computersImpl = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
@@ -494,14 +528,6 @@ ComputerGroupsImpl = (computerGroups as table) as table =>
     //#"Renamed Columns" = Table.RenameColumns(#"Removed Columns",{{"computerGroupDetails.computergroup.id", "computer_id"}, {"computerGroupDetails.computergroup.name", "computer_name"}})
 in
     #"Removed Columns";
-
-MobileDevicesApps = (baseurl as text) as table =>
-   let
-        response = JSSResource(baseurl, "/mobiledevicegroups"),
-       jsonDevicesGroups=Json.Document(response),
-       deviceGroups=Table.FromRecords(jsonDevicesGroups[mobile_device_groups])
-    in
-        deviceGroups;
 
 
 // Data Source Kind description

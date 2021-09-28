@@ -78,6 +78,7 @@ UAPINavTable = (jamfUrl as text) as table =>
             {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
             {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
             {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
+            {"Computers - Configuration Profiles", computerConfigurationProfilesImpl(url, temp_table), "Table", "Table", true},
             {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -116,6 +117,9 @@ initializeGlobalRecord = (url as text) as any =>
         devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
         // We divide by 100 since the default amount per page is 100
         pageSize = 100,
+
+        // Comment out the logic to grab the full number of devices if your instance is large, and uncomment
+        // The specific setting for pages to reduce dev time.
         //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
         pages = 3,
         page_list = {1..pages},
@@ -359,7 +363,7 @@ computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
@@ -369,6 +373,24 @@ computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
         expand_applications2 = Table.ExpandRecordColumn(filtered_table, "applications", {"name", "path", "version", "macAppStore", "sizeMegabytes", "bundleId", "updateAvailable", "externalVersionId"})
     in
         expand_applications2;
+
+computerConfigurationProfilesImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = {
+            "Configuration_Profiles"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 100,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "configurationProfiles"}),
+        expand_profiles = Table.ExpandListColumn(selected_table, "configurationProfiles"),
+        filtered_table = Table.SelectRows(expand_profiles, each [configurationProfiles] <> null),
+        expand_profiles2 = Table.ExpandRecordColumn(filtered_table, "configurationProfiles", {"id", "username", "lastInstalled", "removable", "displayName", "profileIdentifier"}, {"profileId", "username", "lastInstalled", "removable", "displayName", "profileIdentifier"})
+    in
+        expand_profiles2;
 
 
  MobileApplicationsImpl = (MobileApps as table) as table =>
@@ -400,7 +422,7 @@ extensionAttributes = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
@@ -460,7 +482,7 @@ computersImpl = (baseUrl as text, pages_table as table) as table =>
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 10,
+        pageSize = 100,
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
