@@ -142,6 +142,9 @@ let
 in
         return_record;
 
+/*
+This function accepts a url and a reference pages table and grabs the local user accounts for those devices.
+*/
 computerLocalAccountsImpl = (baseUrl as text, pages_table as table) as table =>
     let
         sections = {
