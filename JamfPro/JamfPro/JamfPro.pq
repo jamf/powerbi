@@ -196,18 +196,6 @@ GetDevices = (website as text, token as text) =>
     in
         json;
 
-
-
-BasicAuthorizationHeader = () =>
-    let
-        username = Record.Field(Extension.CurrentCredential(), "Username"),
-        password = Record.Field(Extension.CurrentCredential(), "Password"),
-        bytes = Text.ToBinary(username & ":" & password),
-        credentials = Binary.ToText(bytes, BinaryEncoding.Base64),
-        value = "Basic " & credentials
-    in
-        value;
-
 JSSResource = (baseurl as text, relativepath as text) =>
     let source = Web.Contents(baseurl & "/JSSResource",
         [
