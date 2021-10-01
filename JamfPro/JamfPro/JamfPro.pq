@@ -79,6 +79,7 @@ UAPINavTable = (jamfUrl as text) as table =>
             {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
             {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
             {"Computers - Configuration Profiles", computerConfigurationProfilesImpl(url, temp_table), "Table", "Table", true},
+            {"Computers - Local Accounts", computerLocalAccountsImpl(url, temp_table), "Table", "Table", true},
             {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -140,6 +141,24 @@ let
       return_record=Record.Combine({[mobileDevices=devicesModified]})
 in
         return_record;
+
+computerLocalAccountsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = {
+            "Local_User_Accounts"
+        },
+
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = 100,
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "localUserAccounts"}),
+        expand_local_users = Table.ExpandListColumn(selected_table, "localUserAccounts"),
+        filtered_table = Table.SelectRows(expand_local_users, each [localUserAccounts] <> null),
+        expand_local_user2 = Table.ExpandRecordColumn(filtered_table, "localUserAccounts", {"uid", "username", "fullName", "admin", "userAccountType", "homeDirectory", "homeDirectorySizeMb", "fileVault2Enabled", "passwordMinLength", "passwordMaxAge", "passwordMinComplexCharacters", "passwordRequireAlphanumeric", "passwordHistoryDepth", "computerAzureActiveDirectoryId", "userAzureActiveDirectoryId", "azureActiveDirectoryId"})
+    in
+        expand_local_user2;
 
 legacyInitializeComputerGroupRecord = (url as text) as any =>
     let
