@@ -77,9 +77,6 @@ UAPINavTable = (jamfUrl as text) as table =>
             { "Mobile Device Groups", MobileDevicesGroupsImpl(temp_mobile_devices_group[deviceGroups]), "Table", "Table", true },
             {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
             {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
-            {"Computers - Applications",computerApplicationsImpl(url, temp_table),"Table","Table",true},
-            {"Computers - Configuration Profiles", computerConfigurationProfilesImpl(url, temp_table), "Table", "Table", true},
-            {"Computers - Local Accounts", computerLocalAccountsImpl(url, temp_table), "Table", "Table", true},
             {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
         }),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -122,7 +119,7 @@ initializeGlobalRecord = (url as text) as any =>
         // Comment out the logic to grab the full number of devices if your instance is large, and uncomment
         // The specific setting for pages to reduce dev time.
         pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
-        //pages = 3,
+        //pages = 30,
         page_list = {1..pages},
         // Text.From is used to convert the Numbers to Text for the Table
         table = Table.FromList(List.Transform(page_list, Text.From))
@@ -488,7 +485,21 @@ computersImpl = (baseUrl as text, pages_table as table) as table =>
             "Operating_System",
             "User_And_Location",
             "Purchasing",
-            "Disk_Encryption"
+            "Disk_Encryption",
+            "Security",
+            "Applications",
+            "Storage",
+            "Configuration_Profiles",
+            "Printers",
+            "Services",
+            "Local_User_Accounts",
+            "Certificates",
+            "Attachments",
+            "Plugins",
+            "Fonts",
+            "Licensed_Software",
+            "iBeacons",
+            "Software_Updates"
         },
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
@@ -496,7 +507,7 @@ computersImpl = (baseUrl as text, pages_table as table) as table =>
 
         temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
         computer_table = Table.Combine(temp_table[response]),
-        selected_table = Table.SelectColumns(computer_table, {"id", "general", "hardware", "operatingSystem", "userAndLocation", "purchasing", "diskEncryption"}),
+        selected_table = Table.RemoveColumns(computer_table, "extensionAttributes"),
         expand_general = Table.ExpandRecordColumn(selected_table, "general", {"name","lastIpAddress","lastReportedIp","jamfBinaryVersion","platform","barcode1","barcode2","assetTag","remoteManagement","supervised","mdmCapable","reportDate","lastContactTime","lastCloudBackupDate","lastEnrolledDate","mdmProfileExpiration","initialEntryDate","distributionPoint","site","itunesStoreAccountActive","enrolledViaAutomatedDeviceEnrollment","userApprovedMdm","enrollmentMethod"}),
         expand_disk_encryption = Table.ExpandRecordColumn(expand_general, "diskEncryption", {"individualRecoveryKeyValidityStatus","institutionalRecoveryKeyPresent","diskEncryptionConfigurationName","fileVault2EligibilityMessage","fileVault2EnabledUserNames","bootPartitionEncryptionDetails"}),
         expand_purchasing = Table.ExpandRecordColumn(expand_disk_encryption, "purchasing", {"purchased","leased","poNumber","lifeExpectancy","purchasePrice","purchasingAccount","purchasingContact","appleCareId","vendor","leaseDate","poDate","warrantyDate"}),
