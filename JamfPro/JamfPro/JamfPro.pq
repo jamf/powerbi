@@ -72,18 +72,33 @@ UAPINavTable = (jamfUrl as text) as table =>
         temp_comp_group = legacyInitializeComputerGroupRecord(url),
         source = #table({"Name", "Data", "ItemKind", "ItemName", "IsLeaf"}, {
             { "Computers", computersImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Attachments", computerAttachmentsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Certificates", computerCertificatesImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Fonts", computerFontsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - iBeacons", computeriBeaconsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Licensed Software", computerLicensedSoftwareImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Local Accounts", computerLocalAccountsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Storage", computerStorageImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Package Receipts", computerPackageReceiptsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Plugins", computerPluginsImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Printers", computerPrintersImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Services", computerServicesImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Software Updates", computerSoftwareUpdatesImpl(jamfUrl, temp_table), "Table", "Table", true},
+            { "Computers - Configuration Profiles", computerConfigurationProfilesImpl(jamfUrl, temp_table), "Table", "Table", true},
             { "Mobile Devices", MobileDevicesImpl(temp_mobile_devices[mobileDevices]), "Table", "Table", true },
             { "Computer Device Groups", ComputerGroupsImpl(temp_comp_group[computerGroups]), "Table", "Table", true },
             { "Mobile Device Groups", MobileDevicesGroupsImpl(temp_mobile_devices_group[deviceGroups]), "Table", "Table", true },
             {"Mobile Devices - ExtensionAttributes",MdExtensionAttributes(temp_mobile_devices[mobileDevices]),"Table","Table",true},
-            {"Computers - Extension attributes",extensionAttributes(url, temp_table),"Table","Table",true},
-            {"Mobile - Applications1",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true}
+            {"Computers - ExtensionAttributes",extensionAttributes(url, temp_table),"Table","Table",true},
+            {"Mobile - Applications",MobileApplicationsImpl(temp_mobile_devices[mobileDevices]),"Table","Table",true},
+            {"Computers - Applications", computerApplicationsImpl(url, temp_table), "Table", "Table", true}
         }),
-        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+        navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"),
+        test_table = computersImpl(jamfUrl, temp_table)
         
         
     in
-        navTable;
+        test_table;
 
 /*
 This validates if the provided URL is in the correct format.
@@ -112,14 +127,14 @@ note: Uses 100 devices per page as default
 */
 initializeGlobalRecord = (url as text) as any =>
     let
-        devices = UAPIResource(url, "/v1/computers-inventory?page_size=1")[totalCount],
+        devices = UAPIResource(url, "uapi/v1/computers-inventory?page_size=1")[totalCount],
         // We divide by 100 since the default amount per page is 100
         pageSize = 100,
 
         // Comment out the logic to grab the full number of devices if your instance is large, and uncomment
         // The specific setting for pages to reduce dev time.
-        pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
-        //pages = 30,
+        //pages = if pageSize <> null then Number.RoundDown(devices/pageSize) else Number.RoundDown(devices/100),
+        pages = 1,
         page_list = {1..pages},
         // Text.From is used to convert the Numbers to Text for the Table
         table = Table.FromList(List.Transform(page_list, Text.From))
@@ -144,14 +159,14 @@ This function accepts a url and a reference pages table and grabs the local user
 */
 computerLocalAccountsImpl = (baseUrl as text, pages_table as table) as table =>
     let
-        sections = {
+        sections = List.Transform({
             "Local_User_Accounts"
-        },
+        },Text.Upper),
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 100,
+        pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each  Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.SelectColumns(computer_table, {"id", "localUserAccounts"}),
         expand_local_users = Table.ExpandListColumn(selected_table, "localUserAccounts"),
@@ -211,7 +226,7 @@ Additionally the token can be provided to use that specific one, and the attempt
 The attempts and token parameters are used by the error handling to attempt again during some unstable
 connectivity periods and handle the 401 which might occur if the token becomes invalidated during data retrieval.
 */
-UAPIResource = (baseurl as text, relativepath as text,optional token as text, optional attempts as number) =>
+UAPIResource = (baseurl as text, relativepath as text, optional query as record, optional token as text, optional attempts as number) =>
     let
         // define possible errors
         num_attempts = if attempts = null then 1 else (attempts + 1),
@@ -228,18 +243,18 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
         errors.table = Table.FromRecords(error_records),
 
         // get response
-        response = if token = null then Web.Contents(baseurl & "/uapi",
+        response = if token = null then Web.Contents(baseurl,
         [
             Headers = [
                 #"Accept" = "application/json",
                 #"Authorization" = TokenAuthorizationHeader(baseurl)
             ],
             RelativePath = relativepath,
-            Timeout = Duration.FromText("01:00:00.0"),
             ManualStatusHandling = {429, 401},
-            IsRetry = attempts <> null
+            IsRetry = attempts <> null,
+            Query = query
         ])
-        else Web.Contents(baseurl & "/uapi",
+        else Web.Contents(baseurl,
         [
             Headers = [
                 #"Accept" = "application/json",
@@ -248,7 +263,8 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
             RelativePath = relativepath,
             Timeout = Duration.FromText("01:00:00.0"),
             ManualStatusHandling = {429, 401},
-            IsRetry = attempts <> null
+            IsRetry = attempts <> null,
+            Query = query
         ]),
 
         responseMetadata = Value.Metadata(response),
@@ -256,7 +272,7 @@ UAPIResource = (baseurl as text, relativepath as text,optional token as text, op
         responseHeaders = responseMetadata[Headers],
 
         // Check to see if we got a response, if we didn't let's request it again
-        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, TokenAuthorizationHeader(baseurl, true), num_attempts), #duration(0,0,0,3)) else Json.Document(response)
+        json = if responseCode <> 200 and num_attempts < 3 then Function.InvokeAfter(() => UAPIResource(baseurl, relativepath, query, TokenAuthorizationHeader(baseurl, true), num_attempts), #duration(0,0,0,3)) else Json.Document(response)
     in
         json;
 
@@ -365,14 +381,14 @@ in
 
 computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
     let
-        sections = {
+        sections = List.Transform({
             "Applications"
-        },
+        }, Text.Upper),
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 100,
+        pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.SelectColumns(computer_table, {"id", "applications"}),
         expand_applications = Table.ExpandListColumn(selected_table, "applications"),
@@ -383,14 +399,14 @@ computerApplicationsImpl = (baseUrl as text, pages_table as table) as table =>
 
 computerConfigurationProfilesImpl = (baseUrl as text, pages_table as table) as table =>
     let
-        sections = {
+        sections = List.Transform({
             "Configuration_Profiles"
-        },
+        }, Text.Upper),
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 100,
+        pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.SelectColumns(computer_table, {"id", "configurationProfiles"}),
         expand_profiles = Table.ExpandListColumn(selected_table, "configurationProfiles"),
@@ -399,6 +415,198 @@ computerConfigurationProfilesImpl = (baseUrl as text, pages_table as table) as t
     in
         expand_profiles2;
 
+computerAttachmentsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Attachments"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "attachments"}),
+        table = Table.View(
+                    null,
+                    [
+                        GetType = () =>
+                            type table [
+                            id = Text.Type,
+                            attachments = List.Type
+                            ],
+                        GetRows = () => selected_table,
+                        OnTake = (count as number) =>
+                                if count = 0 then
+                                    #table(
+                                    type table[
+                                    id = Text.Type,
+                                    attachments = List.Type
+                                    ])
+                                else
+                                    Table.FirstN(selected_table, count)
+                    ]
+                    )
+    in
+        table;
+
+computerCertificatesImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Certificates"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "certificates"}),
+        table = Table.View(
+                    null,
+                    [
+                        GetType = () =>
+                            type table [
+                                id = Text.Type,
+                                certificates = List.Type
+                            ],
+                        GetRows = () => selected_table,
+                        OnTake = (count as number) =>
+                            if count = 0 then
+                                    #table(
+                                    type table[
+                                    id = Text.Type,
+                                    certificates = List.Type
+                                    ])
+                                else
+                                    Table.FirstN(selected_table, count)
+                    ])
+    in
+        table;
+
+computerFontsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Fonts"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "fonts"})
+    in
+        selected_table;
+
+computeriBeaconsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "iBeacons"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "ibeacons"})
+    in
+        selected_table;
+
+computerLicensedSoftwareImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Licensed_Software"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "licensedSoftware"})
+    in
+        selected_table;
+
+computerStorageImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Storage"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "storage"})
+    in
+        selected_table;
+
+computerPackageReceiptsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Package_Receipts"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "packageReceipts"})
+    in
+        selected_table;
+
+computerPluginsImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Plugins"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "plugins"})
+    in
+        selected_table;
+
+computerPrintersImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Printers"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "printers"})
+    in
+        selected_table;
+
+computerServicesImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Services"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "services"})
+    in
+        selected_table;
+
+computerSoftwareUpdatesImpl = (baseUrl as text, pages_table as table) as table =>
+    let
+        sections = List.Transform({
+            "Software_Updates"
+        }, Text.Upper),
+        queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
+        pageSize = "100",
+
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
+        computer_table = Table.Combine(temp_table[response]),
+        selected_table = Table.SelectColumns(computer_table, {"id", "softwareUpdates"})
+    in
+        selected_table;
 
  MobileApplicationsImpl = (MobileApps as table) as table =>
     let
@@ -419,19 +627,19 @@ in
 
 extensionAttributes = (baseUrl as text, pages_table as table) as table =>
     let
-        sections = {
+        sections = List.Transform({
             "General",
             "Hardware",
             "Operating_System",
             "User_And_Location",
             "Purchasing",
             "Extension_Attributes"
-        },
+        }, Text.Upper),
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 100,
+        pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.SelectColumns(computer_table, {"id", "general", "hardware", "operatingSystem", "userAndLocation", "purchasing", "diskEncryption"}),
         general_table = Table.SelectColumns(selected_table, {"id", "general"}),
@@ -479,41 +687,263 @@ note: Uses the specific sections of the Jamf Pro UAPI's /v1/computers-inventory 
 computersImpl = (baseUrl as text, pages_table as table) as table =>
     let
         
-        sections = {
+        sections = List.Transform({
             "General",
             "Hardware",
             "Operating_System",
             "User_And_Location",
             "Purchasing",
             "Disk_Encryption",
-            "Security",
-            "Applications",
-            "Storage",
-            "Configuration_Profiles",
-            "Printers",
-            "Services",
-            "Local_User_Accounts",
-            "Certificates",
-            "Attachments",
-            "Plugins",
-            "Fonts",
-            "Licensed_Software",
-            "iBeacons",
-            "Software_Updates"
-        },
+            "Security"
+        }, Text.Upper),
 
         queryString = Text.Combine(List.Transform(sections, Text.Upper), "&section="),
-        pageSize = 100,
+        pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "/v1/computers-inventory?page-sze=" & Text.From(pageSize) & "&page=" & Text.From(_[Column1]) & "&section=" & queryString)[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(_[Column1]), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.RemoveColumns(computer_table, "extensionAttributes"),
-        expand_general = Table.ExpandRecordColumn(selected_table, "general", {"name","lastIpAddress","lastReportedIp","jamfBinaryVersion","platform","barcode1","barcode2","assetTag","remoteManagement","supervised","mdmCapable","reportDate","lastContactTime","lastCloudBackupDate","lastEnrolledDate","mdmProfileExpiration","initialEntryDate","distributionPoint","site","itunesStoreAccountActive","enrolledViaAutomatedDeviceEnrollment","userApprovedMdm","enrollmentMethod"}),
+        expand_general = Table.ExpandRecordColumn(selected_table,
+                            "general",
+                            {"name",
+                                "lastIpAddress",
+                                "lastReportedIp",
+                                "jamfBinaryVersion",
+                                "platform","barcode1",
+                                "barcode2","assetTag",
+                                "remoteManagement",
+                                "supervised",
+                                "mdmCapable",
+                                "reportDate",
+                                "lastContactTime",
+                                "lastCloudBackupDate",
+                                "lastEnrolledDate",
+                                "mdmProfileExpiration",
+                                "initialEntryDate",
+                                "distributionPoint",
+                                "site",
+                                "itunesStoreAccountActive",
+                                "enrolledViaAutomatedDeviceEnrollment",
+                                "userApprovedMdm",
+                                "enrollmentMethod"
+                            }),
         expand_disk_encryption = Table.ExpandRecordColumn(expand_general, "diskEncryption", {"individualRecoveryKeyValidityStatus","institutionalRecoveryKeyPresent","diskEncryptionConfigurationName","fileVault2EligibilityMessage","fileVault2EnabledUserNames","bootPartitionEncryptionDetails"}),
         expand_purchasing = Table.ExpandRecordColumn(expand_disk_encryption, "purchasing", {"purchased","leased","poNumber","lifeExpectancy","purchasePrice","purchasingAccount","purchasingContact","appleCareId","vendor","leaseDate","poDate","warrantyDate"}),
         expand_user_and_location = Table.ExpandRecordColumn(expand_purchasing, "userAndLocation", {"username","realname","email","position","phone","departmentId","buildingId","room"}),
         expand_hardware = Table.ExpandRecordColumn(expand_user_and_location, "hardware", {"make","model","modelIdentifier","serialNumber","processorSpeedMhz","processorCount","coreCount","processorType","processorArchitecture","busSpeedMhz","cacheSizeKilobytes","networkAdapterType","macAddress","altNetworkAdapterType","altMacAddress","totalRamMegabytes","openRamSlots","batteryCapacityPercent","smcVersion","nicSpeed","opticalDrive","bootRom","bleCapable","supportsIosAppInstalls","appleSilicon"}),
-        expand_operating_system = Table.ExpandRecordColumn(expand_hardware, "operatingSystem", {"name","version","build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"}, {"os name","os version","os build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"})
+        expand_operating_system = Table.ExpandRecordColumn(expand_hardware, "operatingSystem", {"name","version","build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"}, {"os name","os version","os build","activeDirectoryStatus","fileVault2Status","softwareUpdateDeviceId"}),
+
+        table = Table.View(
+                    null,
+                    [
+                        GetType = () =>
+                            type table[
+                                id = Number.Type,
+                                udid = Text.Type,
+                                name = Text.Type,
+                                lastIPAddress = Text.Type,
+                                lastReportedIp = Text.Type,
+                                jamfBinaryVersion = Text.Type,
+                                platform = Text.Type,
+                                barcode1 = Text.Type,
+                                barcode2 = Text.Type,
+                                assetTag = Text.Type,
+                                remoteManagement = Record.Type,
+                                supervised = Logical.Type,
+                                mdmCapable = Record.Type,
+                                lastContactTime = DateTime.Type,
+                                lastCloudBackupDate = Date.Type,
+                                lastEnrolledDate = DateTime.Type,
+                                mdmProfileExpiration = DateTime.Type,
+                                initialEntryDate = Date.Type,
+                                distributionPoint = Text.Type,
+                                site = Record.Type,
+                                itunesStoreAccountActive = Logical.Type,
+                                enrolledViaAutomatedDeviceEnrollment = Logical.Type,
+                                userApprovedMdm = Logical.Type,
+                                enrollmentMethod = Record.Type,
+                                individualRecoveryKeyValidityStatus = Text.Type,
+                                diskEncryptionConfigurationName = Any.Type,
+                                fileVault2EligibilityMessage = Text.Type,
+                                fileVault2EnabledUserNames = List.Type,
+                                bootPartitionEncryptionDetails = Record.Type,
+                                localUserAccounts = Any.Type,
+                                purchased = Logical.Type,
+                                leased = Logical.Type,
+                                poNumber = Any.Type,
+                                lifeExpectancy = Number.Type,
+                                purchasePrice = Any.Type,
+                                purchasingAccount = Any.Type,
+                                purchasingContact = Any.Type,
+                                appleCareId = Text.Type,
+                                vendor = Text.Type,
+                                leaseDate = Date.Type,
+                                poDate = Date.Type,
+                                warrantyDate = Date.Type,
+                                printers = Any.Type,
+                                storage = Any.Type,
+                                applications = Any.Type,
+                                username = Text.Type,
+                                realname = Text.Type,
+                                email = Text.Type,
+                                position = Text.Type,
+                                phone = Text.Type,
+                                departmentId = Any.Type,
+                                buildingId = Any.Type,
+                                room = Text.Type,
+                                configurationProfiles = Any.Type,
+                                services = Any.Type,
+                                plugins = Any.Type,
+                                make = Text.Type,
+                                model = Text.Type,
+                                modelIdentifier = Text.Type,
+                                serialNumber = Text.Type,
+                                processorSpeedMhz = Number.Type,
+                                processorCount = Number.Type,
+                                coreCount = Number.Type,
+                                processorType = Text.Type,
+                                processorArchitecture = Text.Type,
+                                busSpeedMhz = Number.Type,
+                                cacheSizeKilobytes = Number.Type,
+                                networkAdapterType = Any.Type,
+                                macAddress = Text.Type,
+                                altNetworkAdapterType = Any.Type,
+                                totalRamMegabytes = Number.Type,
+                                openRamSlots = Number.Type,
+                                batteryCapacityPercent = Number.Type,
+                                smcVersion = Text.Type,
+                                nicSpeed = Text.Type,
+                                opticalDrive = Any.Type,
+                                bootRom = Text.Type,
+                                bleCapable = Logical.Type,
+                                supportsiosAppInstalls = Logical.Type,
+                                appleSilicon = Logical.Type,
+                                certificates = Any.Type,
+                                attachments = Any.Type,
+                                packageReceipts = Any.Type,
+                                fonts = Any.Type,
+                                security = Record.Type,
+                                #"os name" = Text.Type,
+                                #"os version" = Text.Type,
+                                #"os build" = Text.Type,
+                                activeDirectoryStatus = Text.Type,
+                                fileVault2Status = Text.Type,
+                                softwareUpdateDeviceId = Any.Type,
+                                licensedSoftware = Any.Type,
+                                softwareUpdates = Any.Type,
+                                groupMemberships = Any.Type,
+                                contentCaching = Any.Type,
+                                ibeacons = Any.Type
+                            ],
+                            GetRows = () => expand_operating_system,
+                            OnTake = (count as number) =>
+                                if count = 0 then
+                                    #table(
+                                    type table[
+                                id = Number.Type,
+                                udid = Text.Type,
+                                name = Text.Type,
+                                lastIPAddress = Text.Type,
+                                lastReportedIp = Text.Type,
+                                jamfBinaryVersion = Text.Type,
+                                platform = Text.Type,
+                                barcode1 = Text.Type,
+                                barcode2 = Text.Type,
+                                assetTag = Text.Type,
+                                remoteManagement = Record.Type,
+                                supervised = Logical.Type,
+                                mdmCapable = Record.Type,
+                                lastContactTime = DateTime.Type,
+                                lastCloudBackupDate = Date.Type,
+                                lastEnrolledDate = DateTime.Type,
+                                mdmProfileExpiration = DateTime.Type,
+                                initialEntryDate = Date.Type,
+                                distributionPoint = Text.Type,
+                                site = Record.Type,
+                                itunesStoreAccountActive = Logical.Type,
+                                enrolledViaAutomatedDeviceEnrollment = Logical.Type,
+                                userApprovedMdm = Logical.Type,
+                                enrollmentMethod = Record.Type,
+                                individualRecoveryKeyValidityStatus = Text.Type,
+                                diskEncryptionConfigurationName = Any.Type,
+                                fileVault2EligibilityMessage = Text.Type,
+                                fileVault2EnabledUserNames = List.Type,
+                                bootPartitionEncryptionDetails = Record.Type,
+                                localUserAccounts = Any.Type,
+                                purchased = Logical.Type,
+                                leased = Logical.Type,
+                                poNumber = Any.Type,
+                                lifeExpectancy = Number.Type,
+                                purchasePrice = Any.Type,
+                                purchasingAccount = Any.Type,
+                                purchasingContact = Any.Type,
+                                appleCareId = Text.Type,
+                                vendor = Text.Type,
+                                leaseDate = Date.Type,
+                                poDate = Date.Type,
+                                warrantyDate = Date.Type,
+                                printers = Any.Type,
+                                storage = Any.Type,
+                                applications = Any.Type,
+                                username = Text.Type,
+                                realname = Text.Type,
+                                email = Text.Type,
+                                position = Text.Type,
+                                phone = Text.Type,
+                                departmentId = Any.Type,
+                                buildingId = Any.Type,
+                                room = Text.Type,
+                                configurationProfiles = Any.Type,
+                                services = Any.Type,
+                                plugins = Any.Type,
+                                make = Text.Type,
+                                model = Text.Type,
+                                modelIdentifier = Text.Type,
+                                serialNumber = Text.Type,
+                                processorSpeedMhz = Number.Type,
+                                processorCount = Number.Type,
+                                coreCount = Number.Type,
+                                processorType = Text.Type,
+                                processorArchitecture = Text.Type,
+                                busSpeedMhz = Number.Type,
+                                cacheSizeKilobytes = Number.Type,
+                                networkAdapterType = Any.Type,
+                                macAddress = Text.Type,
+                                altNetworkAdapterType = Any.Type,
+                                totalRamMegabytes = Number.Type,
+                                openRamSlots = Number.Type,
+                                batteryCapacityPercent = Number.Type,
+                                smcVersion = Text.Type,
+                                nicSpeed = Text.Type,
+                                opticalDrive = Any.Type,
+                                bootRom = Text.Type,
+                                bleCapable = Logical.Type,
+                                supportsiosAppInstalls = Logical.Type,
+                                appleSilicon = Logical.Type,
+                                certificates = Any.Type,
+                                attachments = Any.Type,
+                                packageReceipts = Any.Type,
+                                fonts = Any.Type,
+                                security = Record.Type,
+                                #"os name" = Text.Type,
+                                #"os version" = Text.Type,
+                                #"os build" = Text.Type,
+                                activeDirectoryStatus = Text.Type,
+                                fileVault2Status = Text.Type,
+                                softwareUpdateDeviceId = Any.Type,
+                                licensedSoftware = Any.Type,
+                                softwareUpdates = Any.Type,
+                                groupMemberships = Any.Type,
+                                contentCaching = Any.Type,
+                                ibeacons = Any.Type
+                            ],
+                            {}
+                            )
+                            else Table.FirstN(expand_operating_system, count)])
+                                        
+
+
+
     in
         expand_operating_system;
        
