@@ -88,22 +88,22 @@ initializeComputerGroupRecord = (url as text) as table =>
     in
         computerGroupsModified;
 // this function acts as our API call for queries
-UAPIResource = (baseurl as text, relativepath as text, optional query as record, optional token as text, optional attempts as number) =>
+UAPIResource = (baseUrl as text, relativepath as text, optional query as record, optional token as text, optional attempts as number) =>
     let 
         number_of_attempts = if attempts = null then 1 else (attempts + 1),
         
-        response = if token = null then Web.Contents(baseurl,
+        response = if token = null then Web.Contents(baseUrl,
         [
             Headers = [
                 #"Accept" = "application/json",
-                #"Authorization" = TokenAuthorizationHeader(baseurl)
+                #"Authorization" = TokenAuthorizationHeader(baseUrl)
             ],
             RelativePath = relativepath,
             ManualStatusHandling = {429, 401},
             IsRetry = attempts <> null,
             Query = query
         ])
-        else Web.Contents(baseurl,
+        else Web.Contents(baseUrl,
         [
             Headers = [
                 #"Accept" = "application/json",
@@ -121,24 +121,24 @@ UAPIResource = (baseurl as text, relativepath as text, optional query as record,
         responseHeaders = responseMetadata[Headers],
 
         json = if responseCode <> 200 and number_of_attempts < 3 then Function.InvokeAfter(() =>
-            @UAPIResource(baseurl, relativepath, query, TokenAuthorizationHeader(baseurl, true), number_of_attempts), #duration(0,0,0,3)
+            @UAPIResource(baseUrl, relativepath, query, TokenAuthorizationHeader(baseUrl, true), number_of_attempts), #duration(0,0,0,3)
         ) else Json.Document(response)
     in
         json;
 
 // this function is the API call for classic Jamf Pro API data
-JSSResource = (baseurl as text, relativepath as text, optional token as text, optional attempts as number) =>
+JSSResource = (baseUrl as text, relativepath as text, optional token as text, optional attempts as number) =>
     let 
         numberOfAttempts = if attempts = null then 1 else (attempts + 1),
-        response = if token = null then Web.Contents(baseurl & "/JSSResource",
+        response = if token = null then Web.Contents(baseUrl & "/JSSResource",
         [
             Headers = [
                 #"Accept" = "application/json",
-                #"Authorization" = TokenAuthorizationHeader(baseurl)          
+                #"Authorization" = TokenAuthorizationHeader(baseUrl)          
             ],
             RelativePath = relativepath
         ])
-        else Web.Contents(baseurl,
+        else Web.Contents(baseUrl,
         [
             Headers = [
                 #"Accept" = "application/json",
@@ -152,16 +152,16 @@ JSSResource = (baseurl as text, relativepath as text, optional token as text, op
         responseMetadata = Value.Metadata(response),
         responseCode = responseMetadata[Response.Status],
         responseHeaders = responseMetadata[Headers],
-        json = if responseCode <> 200 and numberOfAttempts < 3 then Function.InvokeAfter(() => @JSSResource(baseurl, relativepath, TokenAuthorizationHeader(baseurl, true), numberOfAttempts), #duration(0,0,0,3))
+        json = if responseCode <> 200 and numberOfAttempts < 3 then Function.InvokeAfter(() => @JSSResource(baseUrl, relativepath, TokenAuthorizationHeader(baseUrl, true), numberOfAttempts), #duration(0,0,0,3))
         else Json.Document(response)
     in
         json;
 
 
 // gets token for auth header in API call
-TokenAuthorizationHeader = (baseurl as text, optional isRetry as logical) =>
+TokenAuthorizationHeader = (baseUrl as text, optional isRetry as logical) =>
     let
-        token = Json.Document(Web.Contents(baseurl, [
+        token = Json.Document(Web.Contents(baseUrl, [
             Headers = [],
             RelativePath = "/api/v1/auth/token",
             Content = Text.ToBinary(""),
@@ -337,7 +337,7 @@ computersImplementation = (baseUrl as text, pages_table as table) as table =>
     in
         expand_security;
 
-computerApplicationsImplementation = (baseurl as text, pages_table as table) as table =>
+computerApplicationsImplementation = (baseUrl as text, pages_table as table) as table =>
     let
         sections = List.Transform({
             "Applications"
@@ -345,7 +345,7 @@ computerApplicationsImplementation = (baseurl as text, pages_table as table) as 
 
         pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseurl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = Table.SelectColumns(computer_table, {"id", "applications"}),
         expand_applications = Table.ExpandListColumn(selected_table, "applications"),
@@ -356,7 +356,7 @@ computerApplicationsImplementation = (baseurl as text, pages_table as table) as 
 
 
 // start of mobile device queries
-mobileDevicesImplementation = (baseurl as text, pages_table as table) as table =>
+mobileDevicesImplementation = (baseUrl as text, pages_table as table) as table =>
     let
         sections = List.Transform({
             "General",
@@ -390,7 +390,7 @@ mobileDevicesImplementation = (baseurl as text, pages_table as table) as table =
             pages_table, 
             "response", 
             each Table.FromRecords(
-                UAPIResource(baseurl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
+                UAPIResource(baseUrl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
                 column_names,
                 MissingField.UseNull
             )
@@ -483,7 +483,7 @@ mobileDevicesImplementation = (baseurl as text, pages_table as table) as table =
     in
         expand_security;
 
-mobileDevicesApplicationsImplementation = (baseurl as text, pages_table as table) as table =>
+mobileDevicesApplicationsImplementation = (baseUrl as text, pages_table as table) as table =>
     let
         sections = List.Transform({
             "Applications"
@@ -515,7 +515,7 @@ mobileDevicesApplicationsImplementation = (baseurl as text, pages_table as table
             pages_table, 
             "response", 
             each Table.FromRecords(
-                UAPIResource(baseurl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
+                UAPIResource(baseUrl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
             column_names,
             MissingField.UseNull
             )),
@@ -547,9 +547,9 @@ mobileDevicesGroupsImplementation = (deviceGroups as table) as table =>
     in
         groups_table;
 
-getMobileDeviceGroupDetails = (id as number, baseurl as text) as any =>
+getMobileDeviceGroupDetails = (id as number, baseUrl as text) as any =>
     let 
-        jsonMDDetails = getJssResource(id,baseurl,"/mobiledevices/id/"),
+        jsonMDDetails = getJssResource(id,baseUrl,"/mobiledevices/id/"),
         mobile_device = jsonMDDetails[mobile_device],
         general = mobile_device[general],
         location = mobile_device[location], 
@@ -564,9 +564,9 @@ getMobileDeviceGroupDetails = (id as number, baseurl as text) as any =>
     in
         result;
 
-getComputerGroupDetails = (id as number, baseurl as text) as any =>
+getComputerGroupDetails = (id as number, baseUrl as text) as any =>
     let
-        jsonComputerGroupDetails = getJssResource(id, baseurl, "/computergroups/id/"),
+        jsonComputerGroupDetails = getJssResource(id, baseUrl, "/computergroups/id/"),
         computer_group = jsonComputerGroupDetails[computer_group]
     in
         computer_group;
@@ -580,9 +580,9 @@ computerGroupsImplementation = (computerGroups as table) as table =>
     in
         table_computer_groups;
 
-getJssResource = (id as number, baseurl as text,path as text) as any =>
+getJssResource = (id as number, baseUrl as text,path as text) as any =>
     let
-        response = JSSResource(baseurl,path & Number.ToText(id)),
+        response = JSSResource(baseUrl,path & Number.ToText(id)),
         result = Json.Document(response)
     in
         result;
