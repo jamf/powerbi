@@ -3,10 +3,9 @@ section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
 
-
 // gets initial jamf URL from user; uses this to make requests
 shared JamfPro.Contents =Value.ReplaceType(
-    JamfNavTable,
+    JamfPro.JamfNavTable,
     type function (
         jamfUrl as (
             type text meta [
@@ -19,7 +18,7 @@ shared JamfPro.Contents =Value.ReplaceType(
 
 
 // sets initial navigation table that links to individual table queries
-JamfNavTable = (url as text) as table =>
+shared JamfPro.JamfNavTable = (url as text) as table =>
     let
         url = validateUrlScheme(url),
         pages_table = initializeComputerRecord(url),
@@ -83,7 +82,8 @@ initializeComputerGroupRecord = (url as text) as table =>
         computerGroupsModified = Table.AddColumn(
             computerGroups, 
             "computerGroupDetails", 
-            each getComputerGroupDetails([id], url)
+            each getComputerGroupDetails([id], url),
+            type record
         )
     in
         computerGroupsModified;
@@ -564,21 +564,33 @@ getMobileDeviceGroupDetails = (id as number, baseUrl as text) as any =>
     in
         result;
 
-getComputerGroupDetails = (id as number, baseUrl as text) as any =>
+getComputerGroupDetails = (id as number, baseUrl as text) as record =>
     let
         jsonComputerGroupDetails = getJssResource(id, baseUrl, "/computergroups/id/"),
-        computer_group = jsonComputerGroupDetails[computer_group]
+        group_list = Record.ToList(jsonComputerGroupDetails[computer_group]),
+        result = Record.FromList(
+            group_list,
+            {"group.id",
+            "group.name",
+            "group.is_smart",
+            "site",
+            "criteria",
+            "computers"}
+        )
     in
-        computer_group;
+        result;
 
 computerGroupsImplementation = (computerGroups as table) as table =>
     let
-        expanded_table = Table.ExpandTableColumn(computerGroups, "computerGroupDetails", {"siteId", "siteName", "criteria"}),
-        expand_criteria = Table.ExpandListColumn(expanded_table, "criteria"),
-        record_list = Table.ToRecords(expand_criteria),
-        table_computer_groups = Table.FromList(record_list, Splitter.SplitByNothing())
+        computerGroupsExpanded = Table.ExpandRecordColumn(
+        computerGroups,
+        "computerGroupDetails",
+        {"site",
+        "criteria",
+        "computers"}
+    )
     in
-        table_computer_groups;
+        computerGroupsExpanded;
 
 getJssResource = (id as number, baseUrl as text,path as text) as any =>
     let
