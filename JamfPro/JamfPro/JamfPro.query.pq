@@ -6,7 +6,10 @@ shared Testing.UnitTest = [
     // Fact(<Name of the Test>, <Expected Value>, <Actual Value>)
     // <Expected Value> and <Actual Value> can be a literal or let statement
     facts = {
-        Fact("Nav table should return 6 rows", 6, Table.RowCount(JamfPro.JamfNavTable("https://ziurlmj.pub.jamf.build")))
+        // this test checks that the global navigation table for the query returns the correct number of global tables / rows
+        // swap out the URL in JamfNavTable() for your own Jamf Pro instance URL 
+        // then add credentials in using the power query SDK credential helper for the instance's admin Username and Password
+        Fact("Nav table should return 6 rows", 6, Table.RowCount(JamfPro.JamfNavTable("https://exampleDomain.jamf.build")))
     },
     report = Facts.Summarize(facts)
 ][report];

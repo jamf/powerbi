@@ -27,7 +27,7 @@ shared JamfPro.JamfNavTable = (url as text) as table =>
         mobile_device_groups = initializeMobileGroupRecord(url),
         source = #table({"Name", "Data", "ItemKind", "ItemName", "IsLeaf"}, {
             { "Computers", computersImplementation(url, pages_table), "Table", "Table", true},
-            { "Computers - Groups", computer_device_groups, "Table", "Table", true},
+            { "Computers - Groups", computerGroupsImplementation(computer_device_groups), "Table", "Table", true},
             { "Computers - Applications", computerApplicationsImplementation(url, pages_table), "Table", "Table", true},
             { "Mobile Devices", mobileDevicesImplementation(url, pages_table_mobile), "Table", "Table", true },
             { "Mobile Devices - Applications", mobileDevicesApplicationsImplementation(url, pages_table_mobile), "Table", "Table", true},
@@ -70,7 +70,8 @@ initializeMobileGroupRecord = (url as text) as table =>
         deviceGroupsModified = Table.AddColumn(
             deviceGroups,
             "mobileDeviceGroupDetails", 
-            each getMobileDeviceGroupDetails([id],url)
+            each getMobileDeviceGroupDetails([id],url),
+            type record
         )
     in
         deviceGroupsModified;
@@ -541,41 +542,66 @@ mobileDevicesApplicationsImplementation = (baseUrl as text, pages_table as table
 
 mobileDevicesGroupsImplementation = (deviceGroups as table) as table =>
     let
-        expanded_table = Table.ExpandTableColumn(deviceGroups, "mobileDeviceGroupDetails", {"device_id", "device_name", "device_mac_address", "device_udid", "device_wifi_mac_address", "device_serial_number"}),
-        record_list = Table.ToRecords(expanded_table),
-        groups_table = Table.FromList(record_list, Splitter.SplitByNothing())
+        expandedTable = Table.ExpandRecordColumn(
+            deviceGroups, 
+            "mobileDeviceGroupDetails", 
+            {"criteria",
+            "site",
+            "mobile_devices"}
+        ),
+        expandedSite = Table.ExpandRecordColumn(
+            expandedTable,
+            "site",
+            {"id",
+            "name"},
+            {"site.id",
+            "site.name"}
+        )
     in
-        groups_table;
+        expandedSite;
 
 getMobileDeviceGroupDetails = (id as number, baseUrl as text) as any =>
     let 
-        jsonMDDetails = getJssResource(id,baseUrl,"/mobiledevices/id/"),
-        mobile_device = jsonMDDetails[mobile_device],
-        general = mobile_device[general],
-        location = mobile_device[location], 
-        purchasing = mobile_device[purchasing],
-        security = mobile_device[security],
-        network = mobile_device[network],
-        extensionAttributes = mobile_device[extension_attributes],
-        extAttrRec = [extAttrs=extensionAttributes],
-        applications = mobile_device[applications],
-        applicationsRec = [mdApps=applications],
-        result = Record.Combine({general,location,purchasing,security,network,extAttrRec,applicationsRec})
+        jsonDeviceGroupDetails = JSSResource(baseUrl, "/mobiledevicegroups/id/" & Number.ToText(id)),
+        device_group_record = jsonDeviceGroupDetails[mobile_device_group],
+        group_criteria_list = device_group_record[criteria],
+        group_site_record = device_group_record[site],
+        group_devices_list = device_group_record[mobile_devices],
+        list_of_device_group_values = {
+            group_criteria_list,
+            group_site_record,
+            group_devices_list
+        },
+        result = Record.FromList(
+            list_of_device_group_values,
+            {
+                "criteria",
+                "site",
+                "mobile_devices"
+            }
+        )
     in
         result;
 
 getComputerGroupDetails = (id as number, baseUrl as text) as record =>
     let
-        jsonComputerGroupDetails = getJssResource(id, baseUrl, "/computergroups/id/"),
-        group_list = Record.ToList(jsonComputerGroupDetails[computer_group]),
+        jsonComputerGroupDetails = JSSResource(baseUrl, "/computergroups/id/" & Number.ToText(id)),
+        computer_group_record = jsonComputerGroupDetails[computer_group],
+        group_site_record = computer_group_record[site],
+        group_criteria_list = computer_group_record[criteria],
+        group_computers_list = computer_group_record[computers],
+        list_of_computer_group_values = {
+            group_site_record,
+            group_criteria_list,
+            group_computers_list
+        },
         result = Record.FromList(
-            group_list,
-            {"group.id",
-            "group.name",
-            "group.is_smart",
-            "site",
-            "criteria",
-            "computers"}
+            list_of_computer_group_values,
+            {
+                "site",
+                "criteria",
+                "computers"
+            }
         )
     in
         result;
@@ -588,16 +614,17 @@ computerGroupsImplementation = (computerGroups as table) as table =>
         {"site",
         "criteria",
         "computers"}
-    )
+        ),
+        sitesExpanded = Table.ExpandRecordColumn(
+            computerGroupsExpanded,
+            "site",
+            {"id",
+            "name"},
+            {"site.id",
+            "site.name"}
+        )
     in
-        computerGroupsExpanded;
-
-getJssResource = (id as number, baseUrl as text,path as text) as any =>
-    let
-        response = JSSResource(baseUrl,path & Number.ToText(id)),
-        result = Json.Document(response)
-    in
-        result;
+        sitesExpanded;
  
 // Data Source Kind description
 JamfPro = [
