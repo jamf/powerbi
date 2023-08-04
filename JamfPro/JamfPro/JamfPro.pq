@@ -45,7 +45,7 @@ validateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "http
 initializeComputerRecord = (url as text) as table =>
     let
         // number of total devices in computer inventory record
-        devices_count = UAPIResource(url, "uapi/v1/computers-inventory")[totalCount],
+        devices_count = UAPIResource(url, "api/v1/computers-inventory")[totalCount],
         pageSize = 100,
         pages = Number.RoundDown(devices_count/pageSize),
         page_list = {1..pages},
@@ -55,7 +55,7 @@ initializeComputerRecord = (url as text) as table =>
 
 initializeMobileRecord = (url as text) as table =>
     let
-        devices_count = UAPIResource(url, "uapi/v2/mobile-devices")[totalCount],
+        devices_count = UAPIResource(url, "api/v2/mobile-devices")[totalCount],
         pageSize = 100,
         pages = Number.RoundDown(devices_count/pageSize),
         page_list = {1..pages},
@@ -195,7 +195,7 @@ computersImplementation = (baseUrl as text, pages_table as table) as table =>
             pages_table,
             "response", 
             each Table.FromRecords(
-                UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results]
+                UAPIResource(baseUrl, "api/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results]
             )
         ),
         computer_table = Table.Combine(temp_table[response]),
@@ -369,7 +369,7 @@ computerApplicationsImplementation = (baseUrl as text, pages_table as table) as 
 
         pageSize = "100",
 
-        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "uapi/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results])),
+        temp_table = Table.AddColumn(pages_table, "response", each Table.FromRecords(UAPIResource(baseUrl, "api/v1/computers-inventory", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results])),
         computer_table = Table.Combine(temp_table[response]),
         selected_table = 
             try Table.SelectColumns(computer_table, {"id", "applications"})
@@ -422,7 +422,7 @@ mobileDevicesImplementation = (baseUrl as text, pages_table as table) as table =
             pages_table, 
             "response", 
             each Table.FromRecords(
-                UAPIResource(baseUrl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
+                UAPIResource(baseUrl, "api/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
                 column_names,
                 MissingField.UseNull
             )
@@ -557,7 +557,7 @@ mobileDevicesApplicationsImplementation = (baseUrl as text, pages_table as table
             pages_table, 
             "response", 
             each Table.FromRecords(
-                UAPIResource(baseUrl, "uapi/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
+                UAPIResource(baseUrl, "api/v2/mobile-devices/detail", [#"page-size" = pageSize, page = Text.From(Number.From(_[Column1]) - 1), section = sections])[results],
             column_names,
             MissingField.UseNull
             )),
