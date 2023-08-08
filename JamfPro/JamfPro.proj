@@ -9,13 +9,11 @@
   <ItemGroup>
     <MezContent Include="JamfPro.pq" />
     <MezContent Include="JamfPro16.png" />
-    <MezContent Include="JamfPro20.png" />
     <MezContent Include="JamfPro24.png" />
     <MezContent Include="JamfPro32.png" />
     <MezContent Include="JamfPro40.png" />
     <MezContent Include="JamfPro48.png" />
     <MezContent Include="JamfPro64.png" />
-    <MezContent Include="JamfPro80.png" />
     <MezContent Include="resources.resx" />
   </ItemGroup>
   <Target Name="BuildMez" AfterTargets="Build" Inputs="@(MezContent)" Outputs="$(MezOutputPath)">
