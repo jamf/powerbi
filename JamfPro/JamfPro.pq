@@ -1,4 +1,4 @@
-﻿[Version = "1.1.0"]
+﻿[Version = "2.0.0"]
 section JamfPro;
 
 [DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
