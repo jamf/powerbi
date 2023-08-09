@@ -1,0 +1,60 @@
+name: Build .mez file and add upload to bin
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - Development
+
+env:
+  SOLUTION_FILE_PATH: .
+  BUILD_CONFIGURATION: Release
+
+permissions:
+  contents: write
+
+jobs:
+  build_mez:
+    name: Build and release .mez
+    runs-on: windows-latest
+    steps:
+      - name: Checkout dev repo
+        uses: actions/checkout@v3
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Build MEZ
+        working-directory: JamfPro
+        run: msbuild /restore /consoleloggerparameters:NoSummary /property:GenerateFullPaths=true
+
+      - name: Upload .mez to develop branch bin
+        uses: actions/upload-artifact@v2
+        with:
+          name: .mez artifact
+          path: JamfPro\bin\AnyCPU\Debug\JamfPro.mez
+
+  commit_to_master:
+    name: Add and commit the new .mez to the master branch
+    runs-on: windows-latest
+    needs: build_mez
+    steps:
+      - name: checkout master branch
+        uses: actions/checkout@v3
+        with:
+          ref: 'master'
+      
+      - name: Remove Existing .mez File
+        run: rm -force JamfPro.mez
+      
+      - name: Download .mez 
+        uses: actions/download-artifact@v3
+        with:
+          name: .mez artifact
+          path: JamfPro.mez
+
+      - name: add and commit .mez changes
+        uses: EndBug/add-and-commit@v9
+        with: 
+          add: 'JamfPro.mez'
+
