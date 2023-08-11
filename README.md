@@ -12,3 +12,5 @@ Please follow the following steps to get your development environment set up in 
  - In VS Code, Open Folder…`powerbi/JamfPro`
  - Select Setup workspace… from Power Query SDK tools
  - Terminal → Run Build Task → Build connector project using MakePQX
+
+ The .vscode directory includes the powerquery project environment settings .json and a simple default build task to build the files into a .mez. When you make changes to the .pq file, you can run the default build task to get an updated .mez to drop into your 'Custom Connector' folder for use in Power BI Desktop.

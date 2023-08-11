@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "powerquery",
+			"operation": "compile",
+			"additionalArgs": [],
+			"group": "build",
+			"problemMatcher": [],
+			"label": "build"
+		},
+		{
+			"type": "shell",
+			"command": "cp bin\\AnyCPU\\Debug\\JamfPro.mez ..\\JamfPro.mez",
+			"dependsOn": [
+				"build"
+			],
+			"label": "build and copy mez artifact to parent directory",
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
