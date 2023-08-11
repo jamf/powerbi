@@ -1,11 +1,11 @@
 ﻿[Version = "2.0.0"]
-section JamfPro;
+section JamfProXYZ;
 
-[DataSource.Kind="JamfPro", Publish="JamfPro.Publish"]
+[DataSource.Kind="JamfProXYZ", Publish="JamfProXYZ.Publish"]
 
 // gets initial jamf URL from user; uses this to make requests
-shared JamfPro.Contents =Value.ReplaceType(
-    JamfPro.JamfNavTable,
+shared JamfProXYZ.Contents =Value.ReplaceType(
+    JamfProXYZ.JamfNavTable,
     type function (
         jamfUrl as (
             type text meta [
@@ -18,7 +18,7 @@ shared JamfPro.Contents =Value.ReplaceType(
 
 
 // sets initial navigation table that links to individual table queries
-shared JamfPro.JamfNavTable = (url as text) as table =>
+shared JamfProXYZ.JamfNavTable = (url as text) as table =>
     let
         url = validateUrlScheme(url),
         pages_table = initializeComputerRecord(url),
@@ -684,8 +684,8 @@ computerGroupsImplementation = (computerGroups as table) as table =>
         sitesExpanded;
  
 // Data Source Kind description
-JamfPro = [
-    TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
+JamfProXYZ = [
+    TestConnection = (dataSourcePath) => {"JamfProXYZ.JamfNavTable", dataSourcePath},
     Authentication = [
         UsernamePassword = [
             UsernameLabel="Enter your Jamf Pro username: ",
@@ -696,10 +696,10 @@ JamfPro = [
 ];
 
 // Data Source UI publishing description
-JamfPro.Publish = [
+JamfProXYZ.Publish = [
     Beta = true,
     Category = "Other",
-    ButtonText = { "Jamf Pro", "Access your organization's Jamf Pro model" },
+    ButtonText = { "Jamf Pro - Test Version", "Access your organization's Jamf Pro model" },
     LearnMoreUrl = "https://www.jamf.com/",
     SourceImage = JamfPro__Get_Devices.Icons,
     SourceTypeImage = JamfPro__Get_Devices.Icons
