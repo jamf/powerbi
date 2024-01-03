@@ -16,5 +16,4 @@ The Development Branch contains the code submitted for Microsoft Certification
 In the Issues section use the tag **Enhancements** to file feature requets and bug reports.
 
 # Extra Links
-A wonderful blog on basic usage can be found here. This is community driven. https://www.slingpine.com/
 
