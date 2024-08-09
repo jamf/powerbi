@@ -9,19 +9,21 @@ shared JamfPro.Contents = Value.ReplaceType(
     type function (
         jamfUrl as (
             type text meta [
-                Documentation.FieldCaption = "Jamf Pro Instance URL",
-                Documentation.FieldDescription = "The Jamf Pro URL for your specific instance. This is the same one you use to log into your instance.",
+                Documentation.FieldCaption = "Jamf Pro URL",
+                Documentation.FieldDescription = "The URL for your Jamf Pro instance",
                 Documentation.FieldSampleValues = {"https://acme.jamfcloud.com"}
             ]
         ),
         authType as (
             type text meta [
                 Documentation.FieldCaption = "Authentication Type",
-                Documentation.FieldDescription = "Select the type of authentication you would like to use to connect to your Jamf Pro instance.",
+                Documentation.FieldDescription = "The type of authentication to connect to your Jamf Pro instance",
                 Documentation.AllowedValues = {"ClientCredentials", "UsernamePassword"}
             ]
         )
-    ) as text);
+    ) as text meta [
+        Documentation.Name = "Jamf Pro"
+    ]);
 
 
 // sets initial navigation table that links to individual table queries
@@ -46,8 +48,14 @@ shared JamfPro.JamfNavTable = (url as text, authType as text) as table =>
         navTable;
 
 // simple function to validate that URL is in correct format
-validateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
+validateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else removeTrailingSlash(url);
 validateAuthType = (authType as text) as text => if (authType <> "ClientCredentials" and authType <> "UsernamePassword") then error "Authentication type selection is required" else authType;
+
+removeTrailingSlash = (url as text) as text =>
+    if Text.EndsWith(url, "/") then
+        Text.RemoveRange(url, Text.Length(url) - 1, 1)
+    else
+        url;
 
 // initialization functions: 
 // these functions set the page tables for the global records
@@ -709,17 +717,18 @@ JamfPro = [
     Authentication = [
         UsernamePassword = [
             UsernameLabel="Client ID (or username): ",
-            PasswordLabel="Client secret (or password): "
+            PasswordLabel="Client secret (or password): ",
+            Label = "Jamf Pro Credentials"
         ]
     ],
-    Label = Extension.LoadString("JamfPro_URL")
+    Label = "Jamf Pro"
 ];
 
 // Data Source UI publishing description
 JamfPro.Publish = [
     Beta = true,
     Category = "Other",
-    ButtonText = { "Jamf Pro", "Access your organization's Jamf Pro model" },
+    ButtonText = { "Jamf Pro", "Import data from Jamf Pro" },
     LearnMoreUrl = "https://www.jamf.com/",
     SourceImage = JamfPro__Get_Devices.Icons,
     SourceTypeImage = JamfPro__Get_Devices.Icons
