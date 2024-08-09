@@ -18,7 +18,7 @@ shared JamfPro.Contents = Value.ReplaceType(
             type text meta [
                 Documentation.FieldCaption = "Authentication Type",
                 Documentation.FieldDescription = "Select the type of authentication you would like to use to connect to your Jamf Pro instance.",
-                Documentation.AllowedValues = {"APIClientIDSecret", "UsernamePassword"}
+                Documentation.AllowedValues = {"ClientCredentials", "UsernamePassword"}
             ]
         )
     ) as text);
@@ -47,7 +47,7 @@ shared JamfPro.JamfNavTable = (url as text, authType as text) as table =>
 
 // simple function to validate that URL is in correct format
 validateUrlScheme = (url as text) as text => if (Uri.Parts(url)[Scheme] <> "https") then error "Url scheme must be HTTPS" else url;
-validateAuthType = (authType as text) as text => if (authType <> "APIClientIDSecret" and authType <> "UsernamePassword") then error "Authentication type selection is required" else authType;
+validateAuthType = (authType as text) as text => if (authType <> "ClientCredentials" and authType <> "UsernamePassword") then error "Authentication type selection is required" else authType;
 
 // initialization functions: 
 // these functions set the page tables for the global records
@@ -179,7 +179,7 @@ TokenAuthorizationHeader = (baseUrl as text, authType as text, optional isRetry 
                         Content = Text.ToBinary(""),
                         IsRetry = if isRetry <> null then isRetry else false
                     ]))[token]
-                else if authType = "APIClientIDSecret" then
+                else if authType = "ClientCredentials" then
                     Json.Document(Web.Contents(baseUrl, [
                         Headers = [#"Content-Type" = "application/x-www-form-urlencoded"],                        
                         RelativePath = "/api/v1/oauth/token",
@@ -708,8 +708,8 @@ JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
     Authentication = [
         UsernamePassword = [
-            UsernameLabel="API Client ID (or username): ",
-            PasswordLabel="API Client secret (or password): "
+            UsernameLabel="Client ID (or username): ",
+            PasswordLabel="Client secret (or password): "
         ]
     ],
     Label = Extension.LoadString("JamfPro_URL")
