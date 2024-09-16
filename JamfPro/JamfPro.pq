@@ -1,4 +1,4 @@
-﻿[Version = "1.0.0"]
+﻿[Version = "1.1.0"]
 section JamfPro;
 
 [DataSource.Kind = "JamfPro", Publish = "JamfPro.Publish"]
@@ -117,21 +117,6 @@ initializeMobileGroupRecord = (url as text) as any =>
     in
         return_record;
 
-GetDevices = (website as text, token as text) =>
-    let
-        source = Web.Contents(
-            website & "/uapi/settings/obj/building",
-            [
-                Headers = [
-                    #"Authorization" = "jamf-token " & token,
-                    #"Accepts" = "application/json"
-                ]
-            ]
-        ),
-        json = Json.Document(source)
-    in
-        json;
-
 BasicAuthorizationHeader = () =>
     let
         username = Record.Field(Extension.CurrentCredential(), "Username"),
@@ -142,22 +127,68 @@ BasicAuthorizationHeader = () =>
     in
         value;
 
+shared CachedToken = null;
+
+GetOrRefreshToken = (baseurl as text, username as text, password as text) as text =>
+    let
+        token = if CachedToken = null then
+            GetBearerToken(baseurl, username, password)
+        else
+            CachedToken
+    in
+        token;
+
+GetBearerToken = (baseurl as text, username as text, password as text) as text =>
+    let
+        tokenResponse = Web.Contents(baseurl & "/api/v1/auth/token", [
+            Headers = [
+                #"Authorization" = "Basic " & Binary.ToText(Text.ToBinary(username & ":" & password), BinaryEncoding.Base64)
+            ],
+            Content = Text.ToBinary("")
+        ]),
+        jsonResponse = Json.Document(tokenResponse),
+        token = jsonResponse[token]
+    in
+        token;
+
 JSSResource = (baseurl as text, relativepath as text) =>
     let
+        token = GetOrRefreshToken(baseurl, Extension.CurrentCredential()[Username], Extension.CurrentCredential()[Password]),
         source = Web.Contents(
             baseurl & "/JSSResource", [
                 Headers = [
-                    #"Accept" = "application/json"
+                    #"Accept" = "application/json",
+                    #"Authorization" = "Bearer " & token
                 ],
-                RelativePath = relativepath
+                RelativePath = relativepath,
+                ManualStatusHandling = {401}
             ]
-        )
+        ),
+        responseStatus = Value.Metadata(source)[Response.Status],
+        finalSource = if responseStatus = 401 then
+            let
+                newToken = GetBearerToken(baseurl, Extension.CurrentCredential()[Username], Extension.CurrentCredential()[Password]),
+                CachedToken = newToken,
+                retrySource = Web.Contents(
+                    baseurl & "/JSSResource", [
+                        Headers = [
+                            #"Accept" = "application/json",
+                            #"Authorization" = "Bearer " & newToken
+                        ],
+                        RelativePath = relativepath
+                    ]
+                )
+            in
+                retrySource
+        else
+            source
     in
-        source;
+        finalSource;
 
 GetJssResource = (id as number, baseurl as text, path as text) as any =>
     let
-        response = JSSResource(baseurl, path & Number.ToText(id)), result = Json.Document(response)
+        response = JSSResource(baseurl, path & Number.ToText(id)),
+        result = Json.Document(response)
     in
         result;
 
@@ -177,12 +208,6 @@ GetComputerDetails = (id as number, baseurl as text) as any =>
         hardware = computer[hardware],
         extensionAttributes = computer[extension_attributes],
         extAttrRec = [extAttrs = extensionAttributes],
-        //extensionAttributes_modified=Record.RenameFields(extensionAttributes,{{"id","extensionAttr_id"},{"name","extensionAttr_name"},{"type","extensionAttr_type"},{"value","extensionAttr_value"}}),
-        //    geoLocation=Json.Document(Web.Contents("http://192.168.2.11:3001/address/" & Record.Field(general,"ip_address") ,[
-        //           Headers = [
-        //          #"Accept" = "application/json"
-        //       ]
-        //  ])),
         result = Record.Combine({general, location, purchasing, hardware, extAttrRec})
     in
         result;
@@ -894,8 +919,8 @@ JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.Contents", dataSourcePath},
     Authentication = [
         UsernamePassword = [
-            UsernameLabel = "Enter your Jamf Instance User name: ",
-            PasswordLabel = "Enter your Jamf instance password: "
+            UsernameLabel = "Enter your Jamf Pro username: ",
+            PasswordLabel = "Enter your Jamf Pro password: "
         ]
     ],
     Label = Extension.LoadString("JamfPro_URL")
@@ -903,7 +928,7 @@ JamfPro = [
 
 // Data Source UI publishing description
 JamfPro.Publish = [
-    Beta = true,
+    Beta = false,
     Category = "Other",
     ButtonText = {"Jamf Pro", "Access your organization JamfPro model"},
     LearnMoreUrl = "https://www.jamf.com/",
