@@ -1,19 +1,29 @@
-# Power BI
+# powerbi
+Jamf Power BI Integration - Custom Connector
 
-Jamf Power BI Integration version 1.0
+This custom connector workflow requires Jamf Pro 10.48 or higher.
 
-Refer to the "Jamf PowerBI Basic Installation Instructions for PowerBI Desktop.pdf" document for installation and conenction settings if installing into a local Power Bi Desktop, Gateway, and or server environment. 
+Refer to the [install guide pdf](./Jamf%20PowerBI%20Basic%20Installation%20Instructions%20for%20PowerBI%20Desktop.pdf)
+for installation and conenction settings.
 
-# Features
+### Developer set-up
+VS Code on Windows is the recommended development environment. Note that the Power Query SDK
+is required and is only available on Windows. 
 
-The Power BI integration allows you to collect information and make visuals with Computers and Mobile Devices. Specifically you can collect all of the details of the devices, their group relationships, and extension attributes.
+1. On Windows, launch Visual Studio Code.
+2. Install the Power Query SDK extension from the extensions marketplace.
+3. Open the folder `powerbi/JamfPro` in VS Code.
+4. Select Setup workspace… from the Power Query SDK tools.
+5. Go to Terminal → Run Build Task.
 
-# Development Branch
+The [`.vscode`](JamfPro/.vscode) directory includes the Power Query project environment settings and a
+default build task to assemble a `.mez` file and copy it to the repository's root directory. That resulting
+file can be placed in your 'Custom Connector' folder for use in Power BI Desktop.
 
-The Development Branch contains the code submitted for Microsoft Certification 
+ ### Branching strategy and contributions
+* `main` is protected and reflects the latest published version of the connector.
+* `develop` is the default branch for development. Any pull requests should be made against this branch.
 
-# Issues and Feature Requests
-In the Issues section use the tag **Enhancements** to file feature requets and bug reports.
-
-# Extra Links
-
+### CI
+None yet, but a GitHub Action will be added to automate the build process. Until then, keep the `.mez` 
+file in the repository root directory up-to-date with any code changes.
