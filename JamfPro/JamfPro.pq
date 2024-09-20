@@ -1,6 +1,8 @@
 ﻿[Version = "2.0.0"]
 section JamfPro;
 
+pageSize = 100;
+
 [DataSource.Kind = "JamfPro", Publish = "JamfPro.Publish"]
 // gets initial jamf URL from user; uses this to make requests
 shared JamfPro.Contents = Value.ReplaceType(
@@ -93,7 +95,6 @@ initializeComputerRecord = (url as text, authType as text) as table =>
     let
         // number of total devices in computer inventory record
         devices_count = UAPIResource(url, authType, "api/v1/computers-inventory")[totalCount],
-        pageSize = 100,
         pages = Number.RoundDown(devices_count / pageSize),
         page_list = {1..pages},
         pages_table = Table.FromList(List.Transform(page_list, Text.From))
@@ -103,7 +104,6 @@ initializeComputerRecord = (url as text, authType as text) as table =>
 initializeMobileRecord = (url as text, authType as text) as table =>
     let
         devices_count = UAPIResource(url, authType, "api/v2/mobile-devices")[totalCount],
-        pageSize = 100,
         pages = Number.RoundDown(devices_count / pageSize),
         page_list = {1..pages},
         pages_table_mobile = Table.FromList(List.Transform(page_list, Text.From))
@@ -337,7 +337,6 @@ computersImplementation = (baseUrl as text, authType as text, pages_table as tab
             },
             Text.Upper
         ),
-        pageSize = "100",
         temp_table = Table.AddColumn(
             pages_table,
             "response",
@@ -348,7 +347,7 @@ computersImplementation = (baseUrl as text, authType as text, pages_table as tab
                         authType,
                         "api/v1/computers-inventory",
                         [
-                            #"page-size" = pageSize,
+                            #"page-size" = Text.From(pageSize),
                             page = Text.From(Number.From(_[Column1]) - 1),
                             section = sections
                         ]
@@ -526,7 +525,6 @@ computersImplementation = (baseUrl as text, authType as text, pages_table as tab
 computerApplicationsImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
     let
         sections = List.Transform({"Applications"}, Text.Upper),
-        pageSize = "100",
         temp_table = Table.AddColumn(
             pages_table,
             "response",
@@ -537,7 +535,7 @@ computerApplicationsImplementation = (baseUrl as text, authType as text, pages_t
                         authType,
                         "api/v1/computers-inventory",
                         [
-                            #"page-size" = pageSize,
+                            #"page-size" = Text.From(pageSize),
                             page = Text.From(Number.From(_[Column1]) - 1),
                             section = sections
                         ]
@@ -572,7 +570,6 @@ computerApplicationsImplementation = (baseUrl as text, authType as text, pages_t
 mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
     let
         sections = List.Transform({"General", "Hardware", "Security"}, Text.Upper),
-        pageSize = "100",
         column_names = {
             "mobileDeviceId",
             "deviceType",
@@ -602,7 +599,7 @@ mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as
                         authType,
                         "api/v2/mobile-devices/detail",
                         [
-                            #"page-size" = pageSize,
+                            #"page-size" = Text.From(pageSize),
                             page = Text.From(Number.From(_[Column1]) - 1),
                             section = sections
                         ]
@@ -721,7 +718,6 @@ mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as
 mobileDevicesApplicationsImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
     let
         sections = List.Transform({"Applications"}, Text.Upper),
-        pageSize = "100",
         column_names = {
             "mobileDeviceId",
             "deviceType",
@@ -751,7 +747,7 @@ mobileDevicesApplicationsImplementation = (baseUrl as text, authType as text, pa
                         authType,
                         "api/v2/mobile-devices/detail",
                         [
-                            #"page-size" = pageSize,
+                            #"page-size" = Text.From(pageSize),
                             page = Text.From(Number.From(_[Column1]) - 1),
                             section = sections
                         ]
