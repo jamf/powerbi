@@ -8,16 +8,18 @@ shared JamfPro.Contents = Value.ReplaceType(
     type function (
         jamfUrl as (
             type text meta [
+                Documentation.Name = "URL",
                 Documentation.FieldCaption = "Jamf Pro URL",
                 Documentation.FieldDescription = "The URL for your Jamf Pro instance",
                 Documentation.FieldSampleValues = {"https://acme.jamfcloud.com"}
             ]
         ),
-        authType as (
+        optional authType as (
             type text meta [
+                Documentation.Name = "Authentication",
                 Documentation.FieldCaption = "Authentication Type",
-                Documentation.FieldDescription = "The type of authentication to connect to your Jamf Pro instance",
-                Documentation.AllowedValues = {"ClientCredentials", "UsernamePassword"}
+                Documentation.FieldDescription = "Authentication type for connecting to your Jamf Pro instance. Default is UsernamePassword.",
+                Documentation.AllowedValues = {"UsernamePassword", "ClientCredentials"}
             ]
         )
     ) as text meta [
@@ -26,10 +28,10 @@ shared JamfPro.Contents = Value.ReplaceType(
 );
 
 // sets initial navigation table that links to individual table queries
-shared JamfPro.JamfNavTable = (url as text, authType as text) as table =>
+shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table =>
     let
         url = validateUrlScheme(url),
-        authType = validateAuthType(authType),
+        authType = if authType = null then "UsernamePassword" else validateAuthType(authType),
         pages_table = initializeComputerRecord(url, authType),
         pages_table_mobile = initializeMobileRecord(url, authType),
         computer_device_groups = initializeComputerGroupRecord(url, authType),
@@ -81,7 +83,7 @@ validateUrlScheme = (url as text) as text =>
         removeTrailingSlash(url);
 validateAuthType = (authType as text) as text =>
     if (authType <> "ClientCredentials" and authType <> "UsernamePassword") then
-        error "Authentication type selection is required"
+        "UsernamePassword"
     else
         authType;
 
@@ -814,8 +816,8 @@ JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
     Authentication = [
         UsernamePassword = [
-            UsernameLabel = "Client ID (or username): ",
-            PasswordLabel = "Client secret (or password): ",
+            UsernameLabel = "Username (or client ID)",
+            PasswordLabel = "Password (or client secret)",
             Label = "Jamf Pro Credentials"
         ]
     ],
