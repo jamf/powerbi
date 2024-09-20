@@ -40,7 +40,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
             {"Name", "Data", "ItemKind", "ItemName", "IsLeaf"},
             {
                 {"Computers", computersImplementation(url, authType, pages_table), "Table", "Table", true},
-                {"Computers - Groups", computerGroupsImplementation(computer_device_groups), "Table", "Table", true},
+                {"Computer Device Groups", computer_device_groups, "Table", "Table", true},
                 {
                     "Computers - Applications",
                     computerApplicationsImplementation(url, authType, pages_table),
@@ -130,11 +130,24 @@ initializeComputerGroupRecord = (url as text, authType as text) as table =>
     let
         jsonComputerGroups = JSSResource(url, authType, "/computergroups"),
         computerGroups = Table.FromRecords(jsonComputerGroups[computer_groups]),
+        selectedColumns = Table.SelectColumns(computerGroups, {"id", "name", "is_smart"}),
         computerGroupsModified = Table.AddColumn(
-            computerGroups, "computerGroupDetails", each getComputerGroupDetails([id], url, authType), type record
+            selectedColumns, "temp_column", each getComputerGroupMembershipIds([id], url, authType), type list
+        ),
+        tempTable = Table.ExpandListColumn(computerGroupsModified, "temp_column"),
+        computerGroupsModifiedExpanded = Table.ExpandRecordColumn(
+            tempTable, "temp_column", {"id", "name"}, {"computer_id", "computer_name"}
         )
     in
-        computerGroupsModified;
+        computerGroupsModifiedExpanded;
+
+getComputerGroupMembershipIds = (id as number, baseUrl as text, authType as text) as list =>
+    let
+        jsonComputerGroupMembers = JSSResource(baseUrl, authType, "/computergroups/id/" & Number.ToText(id)),
+        computerGroupMembers = try jsonComputerGroupMembers[computer_group][computers] as list otherwise {}
+    in
+        computerGroupMembers;
+
 // this function acts as our API call for queries
 UAPIResource = (
     baseUrl as text,
@@ -785,32 +798,6 @@ getMobileDeviceGroupDetails = (id as number, baseUrl as text, authType as text) 
     in
         result;
 
-getComputerGroupDetails = (id as number, baseUrl as text, authType as text) as record =>
-    let
-        jsonComputerGroupDetails = JSSResource(baseUrl, authType, "/computergroups/id/" & Number.ToText(id)),
-        computer_group_record = jsonComputerGroupDetails[computer_group],
-        group_site_record = computer_group_record[site],
-        group_criteria_list = computer_group_record[criteria],
-        group_computers_list = computer_group_record[computers],
-        list_of_computer_group_values = {group_site_record, group_criteria_list, group_computers_list},
-        result = Record.FromList(list_of_computer_group_values, {"site", "criteria", "computers"})
-    in
-        result;
-
-computerGroupsImplementation = (computerGroups as table) as table =>
-    let
-        computerGroupsExpanded =
-            try
-                Table.ExpandRecordColumn(computerGroups, "computerGroupDetails", {"site", "criteria", "computers"})
-            otherwise
-                computerGroups,
-        sitesExpanded =
-            try
-                Table.ExpandRecordColumn(computerGroupsExpanded, "site", {"id", "name"}, {"site.id", "site.name"})
-            otherwise
-                computerGroupsExpanded
-    in
-        sitesExpanded;
 // Data Source Kind description
 JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
