@@ -62,13 +62,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                     "Table",
                     true
                 },
-                {
-                    "Mobile Devices - Groups",
-                    mobileDevicesGroupsImplementation(mobile_device_groups),
-                    "Table",
-                    "Table",
-                    true
-                }
+                {"Mobile Device Groups", mobile_device_groups, "Table", "Table", true}
             }
         ),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -120,11 +114,26 @@ initializeMobileGroupRecord = (url as text, authType as text) as table =>
     let
         jsonDeviceGroups = JSSResource(url, authType, "/mobiledevicegroups"),
         deviceGroups = Table.FromRecords(jsonDeviceGroups[mobile_device_groups]),
-        deviceGroupsModified = Table.AddColumn(
-            deviceGroups, "mobileDeviceGroupDetails", each getMobileDeviceGroupDetails([id], url, authType), type record
+        selectedColumns = Table.SelectColumns(deviceGroups, {"id", "name", "is_smart"}),
+        groupsPlusMembership = Table.AddColumn(
+            selectedColumns, "temp_column", each getMobileDeviceMembership([id], url, authType), type list
+        ),
+        tempTable = Table.ExpandListColumn(groupsPlusMembership, "temp_column"),
+        mobileDeviceGroupExpanded = Table.ExpandRecordColumn(
+            tempTable,
+            "temp_column",
+            {"id", "name", "mac_address", "udid", "wifi_mac_address", "serial_number"},
+            {
+                "device_id",
+                "device_name",
+                "device_mac_address",
+                "device_udid",
+                "device_wifi_mac_address",
+                "device_serial_number"
+            }
         )
     in
-        deviceGroupsModified;
+        mobileDeviceGroupExpanded;
 
 initializeComputerGroupRecord = (url as text, authType as text) as table =>
     let
@@ -147,6 +156,14 @@ getComputerGroupMembershipIds = (id as number, baseUrl as text, authType as text
         computerGroupMembers = try jsonComputerGroupMembers[computer_group][computers] as list otherwise {}
     in
         computerGroupMembers;
+
+getMobileDeviceMembership = (id as number, baseUrl as text, authType as text) as list =>
+    let
+        jsonMobileDeviceGroupMembers = JSSResource(baseUrl, authType, "/mobiledevicegroups/id/" & Number.ToText(id)),
+        mobileDeviceGroupMembers =
+            try jsonMobileDeviceGroupMembers[mobile_device_group][mobile_devices] as list otherwise {}
+    in
+        mobileDeviceGroupMembers;
 
 // this function acts as our API call for queries
 UAPIResource = (
@@ -770,33 +787,6 @@ mobileDevicesApplicationsImplementation = (baseUrl as text, authType as text, pa
                 ) otherwise filtered_table
     in
         expand_applications2;
-
-mobileDevicesGroupsImplementation = (deviceGroups as table) as table =>
-    let
-        expandedTable =
-            try
-                Table.ExpandRecordColumn(
-                    deviceGroups, "mobileDeviceGroupDetails", {"criteria", "site", "mobile_devices"}
-                ) otherwise deviceGroups,
-        expandedSite =
-            try
-                Table.ExpandRecordColumn(expandedTable, "site", {"id", "name"}, {"site.id", "site.name"})
-            otherwise
-                expandedTable
-    in
-        expandedSite;
-
-getMobileDeviceGroupDetails = (id as number, baseUrl as text, authType as text) as any =>
-    let
-        jsonDeviceGroupDetails = JSSResource(baseUrl, authType, "/mobiledevicegroups/id/" & Number.ToText(id)),
-        device_group_record = jsonDeviceGroupDetails[mobile_device_group],
-        group_criteria_list = device_group_record[criteria],
-        group_site_record = device_group_record[site],
-        group_devices_list = device_group_record[mobile_devices],
-        list_of_device_group_values = {group_criteria_list, group_site_record, group_devices_list},
-        result = Record.FromList(list_of_device_group_values, {"criteria", "site", "mobile_devices"})
-    in
-        result;
 
 // Data Source Kind description
 JamfPro = [
