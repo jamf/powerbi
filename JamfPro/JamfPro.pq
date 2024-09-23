@@ -35,6 +35,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
         url = validateUrlScheme(url),
         authType = if authType = null then "UsernamePassword" else validateAuthType(authType),
         computerPageCount = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
+        mobileDevicesPageCount = getTotalNumberOfPages(url, authType, "v2/mobile-devices"),
         pages_table = initializeComputerRecord(url, authType),
         pages_table_mobile = initializeMobileRecord(url, authType),
         computer_device_groups = initializeComputerGroupRecord(url, authType),
@@ -59,8 +60,8 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                     true
                 },
                 {
-                    "Mobile Devices - Applications",
-                    mobileDevicesApplicationsImplementation(url, authType, pages_table_mobile),
+                    "Mobile - Applications",
+                    getMobileDeviceApplications(url, authType, mobileDevicesPageCount),
                     "Table",
                     "Table",
                     true
@@ -100,15 +101,22 @@ getTotalNumberOfPages = (url as text, authType as text, relativePath as text) as
         pages;
 
 getComputersOnePage = (url as text, authType as text, sections as list, page as number) as list =>
+    getOnePage(url, authType, sections, page, "api/v1/computers-inventory", "id");
+
+getMobileDevicesOnePage = (url as text, authType as text, sections as list, page as number) as list =>
+    getOnePage(url, authType, sections, page, "api/v2/mobile-devices/detail", "mobileDeviceId");
+
+getOnePage = (url as text, authType as text, sections as list, page as number, path as text, sortKey as text) as list =>
     let
         result = UAPIResource(
             url,
             authType,
-            "api/v1/computers-inventory",
+            path,
             [
-                page = Text.From(page),
                 #"page-size" = Text.From(pageSize),
-                section = sections
+                page = Text.From(page),
+                section = sections,
+                sort = sortKey
             ]
         )[results]
     in
@@ -555,7 +563,6 @@ getComputerApplications = (url as text, authType as text, totalPagesCount as num
             "computerDetails.computerApplications.path",
             "computerDetails.computerApplications.version"
         },
-
         emptyTable = #table(List.Combine({{"id"}, fieldNamesForTable}), {}),
         result =
             if totalPagesCount = 0 then
@@ -578,7 +585,6 @@ getComputerApplications = (url as text, authType as text, totalPagesCount as num
                     expandedApplicationsWithFieldNames
     in
         result;
-
 
 // start of mobile device queries
 mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
@@ -729,75 +735,68 @@ mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as
     in
         expand_security;
 
-mobileDevicesApplicationsImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
+getMobileDeviceApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
-        sections = List.Transform({"Applications"}, Text.Upper),
-        column_names = {
-            "mobileDeviceId",
-            "deviceType",
-            "hardware",
-            "userAndLocation",
-            "purchasing",
-            "applications",
-            "certificates",
-            "profiles",
-            "userProfiles",
-            "extensionAttributes",
-            "general",
-            "security",
-            "ebooks",
-            "network",
-            "serviceSubscriptions",
-            "provisioningProfiles",
-            "sharedUsers"
+        apiFieldsGeneral = {"displayName", "udid", "managed", "supervised"},
+        tableFieldsGeneral = {"name", "udid", "managed", "supervised"},
+        apiFieldsHardware = {"serialNumber", "wifiMacAddress", "model", "modelIdentifier"},
+        tableFieldsHardware = {"serial_number", "wifi_mac_address", "model", "model_identifier"},
+        apiFieldsApps = {"name", "version", "identifier"},
+        tableFieldsApps = {
+            "mobileDeviceDetails.mdApps.application_name",
+            "mobileDeviceDetails.mdApps.application_version",
+            "mobileDeviceDetails.mdApps.identifier"
         },
-        temp_table = Table.AddColumn(
-            pages_table,
-            "response",
-            each
-                Table.FromRecords(
-                    UAPIResource(
-                        baseUrl,
-                        authType,
-                        "api/v2/mobile-devices/detail",
-                        [
-                            #"page-size" = Text.From(pageSize),
-                            page = Text.From(Number.From(_[Column1]) - 1),
-                            section = sections
-                        ]
-                    )[results],
-                    column_names,
-                    MissingField.UseNull
-                )
+        apiFieldsUserAndLocation = {"phoneNumber", "username"},
+        tableFieldsUserAndLocation = {"phone_number", "username"},
+        emptyTable = #table(
+            List.Combine(
+                {{"id"}, tableFieldsGeneral, tableFieldsHardware, tableFieldsUserAndLocation, tableFieldsApps}
+            ),
+            {}
         ),
-        mobile_devices_table = Table.Combine(temp_table[response]),
-        selected_table =
-            try
-                Table.SelectColumns(mobile_devices_table, {"mobileDeviceId", "applications"})
-            otherwise
-                mobile_devices_table,
-        expand_applications = try Table.ExpandListColumn(selected_table, "applications") otherwise selected_table,
-        filtered_table =
-            try Table.SelectRows(expand_applications, each [applications] <> null) otherwise expand_applications,
-        expand_applications2 =
-            try
-                Table.ExpandRecordColumn(
-                    filtered_table,
-                    "applications",
-                    {
-                        "identifier",
-                        "name",
-                        "version",
-                        "shortVersion",
-                        "managementStatus",
-                        "validationStatus",
-                        "bundleSize",
-                        "dynamicSize"
-                    }
-                ) otherwise filtered_table
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages,
+                        each
+                            getMobileDevicesOnePage(
+                                url, authType, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _
+                            )
+                    ),
+                    rowPerDevice = List.Combine(listOfPages),
+                    selectedColumns = Table.FromRecords(
+                        rowPerDevice,
+                        {"mobileDeviceId", "general", "hardware", "userAndLocation", "applications"},
+                        MissingField.UseNull
+                    ),
+                    renameIdField = Table.RenameColumns(selectedColumns, {{"mobileDeviceId", "id"}}),
+                    expandGeneral = Table.ExpandRecordColumn(
+                        renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral
+                    ),
+                    expandHardware = Table.ExpandRecordColumn(
+                        expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware
+                    ),
+                    expandUserAndLocation = Table.ExpandRecordColumn(
+                        expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation
+                    ),
+                    normalizeApps = Table.ExpandListColumn(expandUserAndLocation, "applications"),
+                    expandApps = Table.ExpandRecordColumn(
+                        normalizeApps, "applications", apiFieldsApps, tableFieldsApps
+                    )
+                in
+                    expandApps,
+        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
+        compatibleDisplayName = Table.AddColumn(result, "display_name", each [name], type text),
+        // do the same for model, copying it to both modelDisplay and model_display
+        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
+        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
     in
-        expand_applications2;
-
+        compatibleModelDisplay;
 // Data Source Kind description
 JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
