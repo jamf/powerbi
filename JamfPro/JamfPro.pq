@@ -34,6 +34,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
     let
         url = validateUrlScheme(url),
         authType = if authType = null then "UsernamePassword" else validateAuthType(authType),
+        computerPageCount = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
         pages_table = initializeComputerRecord(url, authType),
         pages_table_mobile = initializeMobileRecord(url, authType),
         computer_device_groups = initializeComputerGroupRecord(url, authType),
@@ -45,7 +46,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                 {"Computer Device Groups", computer_device_groups, "Table", "Table", true},
                 {
                     "Computers - Applications",
-                    computerApplicationsImplementation(url, authType, pages_table),
+                    getComputerApplications(url, authType, computerPageCount),
                     "Table",
                     "Table",
                     true
@@ -88,6 +89,30 @@ removeTrailingSlash = (url as text) as text =>
         Text.RemoveRange(url, Text.Length(url) - 1, 1)
     else
         url;
+
+getTotalNumberOfPages = (url as text, authType as text, relativePath as text) as number =>
+    let
+        devices_count = UAPIResource(
+            url, authType, "api/" & relativePath, [#"page-size" = Text.From(pageSize)]
+        )[totalCount],
+        pages = if devices_count = 0 then 0 else Number.RoundUp(devices_count / pageSize)
+    in
+        pages;
+
+getComputersOnePage = (url as text, authType as text, sections as list, page as number) as list =>
+    let
+        result = UAPIResource(
+            url,
+            authType,
+            "api/v1/computers-inventory",
+            [
+                page = Text.From(page),
+                #"page-size" = Text.From(pageSize),
+                section = sections
+            ]
+        )[results]
+    in
+        result;
 
 // initialization functions:
 // these functions set the page tables for the global records
@@ -522,49 +547,38 @@ computersImplementation = (baseUrl as text, authType as text, pages_table as tab
     in
         expand_security;
 
-computerApplicationsImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
+getComputerApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
-        sections = List.Transform({"Applications"}, Text.Upper),
-        temp_table = Table.AddColumn(
-            pages_table,
-            "response",
-            each
-                Table.FromRecords(
-                    UAPIResource(
-                        baseUrl,
-                        authType,
-                        "api/v1/computers-inventory",
-                        [
-                            #"page-size" = Text.From(pageSize),
-                            page = Text.From(Number.From(_[Column1]) - 1),
-                            section = sections
-                        ]
-                    )[results]
-                )
-        ),
-        computer_table = Table.Combine(temp_table[response]),
-        selected_table = try Table.SelectColumns(computer_table, {"id", "applications"}) otherwise computer_table,
-        expand_applications = try Table.ExpandListColumn(selected_table, "applications") otherwise selected_table,
-        filtered_table =
-            try Table.SelectRows(expand_applications, each [applications] <> null) otherwise expand_applications,
-        expand_applications2 =
-            try
-                Table.ExpandRecordColumn(
-                    filtered_table,
-                    "applications",
-                    {
-                        "name",
-                        "path",
-                        "version",
-                        "macAppStore",
-                        "sizeMegabytes",
-                        "bundleId",
-                        "updateAvailable",
-                        "externalVersionId"
-                    }
-                ) otherwise filtered_table
+        fieldNamesFromApi = {"name", "path", "version"},
+        fieldNamesForTable = {
+            "computerDetails.computerApplications.name",
+            "computerDetails.computerApplications.path",
+            "computerDetails.computerApplications.version"
+        },
+
+        emptyTable = #table(List.Combine({{"id"}, fieldNamesForTable}), {}),
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages, each getComputersOnePage(url, authType, {"GENERAL, APPLICATIONS"}, _)
+                    ),
+                    rowPerComputer = List.Combine(listOfPages),
+                    data = Table.FromRecords(rowPerComputer),
+                    selectedColumns = Table.SelectColumns(data, {"id", "general", "applications"}),
+                    expandGeneral = Table.ExpandRecordColumn(selectedColumns, "general", {"name"}),
+                    expandApplications = Table.ExpandListColumn(expandGeneral, "applications"),
+                    expandedApplicationsWithFieldNames = Table.ExpandRecordColumn(
+                        expandApplications, "applications", fieldNamesFromApi, fieldNamesForTable
+                    )
+                in
+                    expandedApplicationsWithFieldNames
     in
-        expand_applications2;
+        result;
+
 
 // start of mobile device queries
 mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
