@@ -37,7 +37,6 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
         computerPages = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
         mobileDevicesPages = getTotalNumberOfPages(url, authType, "v2/mobile-devices"),
         pages_table = initializeComputerRecord(url, authType),
-        pages_table_mobile = initializeMobileRecord(url, authType),
         source = #table(
             {"Name", "Data", "ItemKind", "ItemName", "IsLeaf"},
             {
@@ -50,13 +49,8 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                     "Table",
                     true
                 },
-                {
-                    "Mobile Devices",
-                    mobileDevicesImplementation(url, authType, pages_table_mobile),
-                    "Table",
-                    "Table",
-                    true
-                },
+                {"Mobile Devices", mobileDevices(url, authType, mobileDevicesPages),
+                "Table", "Table", true},
                 {
                     "Mobile - Applications",
                     mobileDeviceApplications(url, authType, mobileDevicesPages),
@@ -131,15 +125,6 @@ initializeComputerRecord = (url as text, authType as text) as table =>
         pages_table = Table.FromList(List.Transform(page_list, Text.From))
     in
         pages_table;
-
-initializeMobileRecord = (url as text, authType as text) as table =>
-    let
-        devices_count = UAPIResource(url, authType, "api/v2/mobile-devices")[totalCount],
-        pages = Number.RoundDown(devices_count / pageSize),
-        page_list = {1..pages},
-        pages_table_mobile = Table.FromList(List.Transform(page_list, Text.From))
-    in
-        pages_table_mobile;
 
 mobileDeviceGroups = (url as text, authType as text) as table =>
     let
@@ -584,154 +569,358 @@ computerApplications = (url as text, authType as text, totalPagesCount as number
     in
         result;
 
-// start of mobile device queries
-mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
+// Mobile device lookup and mapping function.
+//
+// Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
+// - `apiFields` are the fields returned by the API and `tableFields` are the fields that will
+//   be displayed in the Power BI table. The remapping was necessary to limit the number of
+//   changes to the legacy data model, in an effort to preserve existing data sets and
+//   visualizations where possible.
+// - Commented out fields in the `apiFields` lists do not have an analogue in the legacy data model
+//   and are excluded at this time. They may be added in the future.
+// - Fields in the `unmapped` list will be removed from legacy data models. Most of these are
+//   duplicative (e.g., model/modelDisplay/model_display).
+// - Dates are mapped to the _utc variant of the field name to match the legacy data model.
+mobileDevices = (url as text, authType as text, totalPagesCount as number) as table =>
     let
-        sections = List.Transform({"General", "Hardware", "Security"}, Text.Upper),
-        column_names = {
-            "mobileDeviceId",
-            "deviceType",
-            "hardware",
-            "userAndLocation",
-            "purchasing",
-            "applications",
-            "certificates",
-            "profiles",
-            "userProfiles",
-            "extensionAttributes",
-            "general",
-            "security",
-            "ebooks",
-            "network",
-            "serviceSubscriptions",
-            "provisioningProfiles",
-            "sharedUsers"
+        apiFieldsTopLevel = {"mobileDeviceId", "deviceType"},
+        tableFieldsTopLevel = {"id", "mobileDeviceDetails.os_type"},
+        apiFieldsGeneral = {
+            "udid",
+            "displayName",
+            "assetTag",
+            "siteId",
+            "lastInventoryUpdateDate",
+            "osVersion",
+            // "osRapidSecurityResponse"
+            "osBuild",
+            // "osSupplementalBuildVersion"
+            // "softwareUpdateDeviceId",
+            "ipAddress",
+            "managed",
+            "supervised",
+            "deviceOwnershipType",
+            // "enrollmentMethodPrestage",
+            // "enrollmentSessionTokenValid",
+            "lastEnrolledDate",
+            // "mdmProfileExpirationDate",
+            // "timeZone",
+            // "declarativeDeviceManagementEnabled",
+            // "extensionAttributes",
+            "sharedIpad",
+            // "diagnosticAndUsageReportingEnabled",
+            // "appAnalyticsEnabled",
+            // "residentUsers",
+            // "quotaSize",
+            // "temporarySessionOnly",
+            // "temporarySessionTimeout",
+            // "userSessionTimeout",
+            // "syncedToComputer",
+            // "maximumSharediPadUsersStored",
+            "lastBackupDate",
+            "deviceLocatorServiceEnabled",
+            "doNotDisturbEnabled",
+            "cloudBackupEnabled",
+            "lastCloudBackupDate",
+            // "locationServicesForSelfServiceMobileEnabled",
+            "itunesStoreAccountActive",
+            "exchangeDeviceId",
+            "tethered"
         },
-        temp_table_mobile = Table.AddColumn(
-            pages_table,
-            "response",
-            each
-                Table.FromRecords(
-                    UAPIResource(
-                        baseUrl,
-                        authType,
-                        "api/v2/mobile-devices/detail",
-                        [
-                            #"page-size" = Text.From(pageSize),
-                            page = Text.From(Number.From(_[Column1]) - 1),
-                            section = sections
-                        ]
-                    )[results],
-                    column_names,
-                    MissingField.UseNull
-                )
+        tableFieldsGeneral = {
+            "mobileDeviceDetails.udid",
+            "name",
+            "mobileDeviceDetails.asset_tag",
+            // note, legacy connector maps this as a Record type (with the site's ID and name), but we're just mapping the ID
+            "mobileDeviceDetails.site",
+            "mobileDeviceDetails.last_inventory_update_utc",
+            "mobileDeviceDetails.os_version",
+            "mobileDeviceDetails.os_build",
+            "mobileDeviceDetails.ip_address",
+            "mobileDeviceDetails.managed",
+            "mobileDeviceDetails.supervised",
+            "mobileDeviceDetails.device_ownership_level",
+            "mobileDeviceDetails.last_enrollment_utc",
+            "mobileDeviceDetails.shared",
+            "mobileDeviceDetails.last_backup_time_utc",
+            "mobileDeviceDetails.device_locator_service_enabled",
+            "mobileDeviceDetails.do_not_disturb_enabled",
+            "mobileDeviceDetails.cloud_backup_enabled",
+            "mobileDeviceDetails.last_cloud_backup_date_utc",
+            "mobileDeviceDetails.itunes_store_account_is_active",
+            "mobileDeviceDetails.exchange_activesync_device_identifier",
+            "mobileDeviceDetails.tethered"
+        },
+        apiFieldsHardware = {
+            "capacityMb",
+            "availableSpaceMb",
+            "usedSpacePercentage",
+            "batteryLevel",
+            "serialNumber",
+            "wifiMacAddress",
+            "bluetoothMacAddress",
+            "modemFirmwareVersion",
+            "model",
+            "modelIdentifier",
+            "modelNumber",
+            "bluetoothLowEnergyCapable"
+        },
+        tableFieldsHardware = {
+            "mobileDeviceDetails.capacity_mb",
+            "mobileDeviceDetails.available_mb",
+            "mobileDeviceDetails.percentage_used",
+            "mobileDeviceDetails.battery_level",
+            "mobileDeviceDetails.serial_number",
+            "mobileDeviceDetails.wifi_mac_address",
+            "mobileDeviceDetails.bluetooth_mac_address",
+            "mobileDeviceDetails.modem_firmware",
+            "mobileDeviceDetails.model",
+            "mobileDeviceDetails.model_identifier",
+            "mobileDeviceDetails.model_number",
+            "mobileDeviceDetails.ble_capable"
+        },
+        apiFieldsUserAndLocation = {
+            "username",
+            "realName",
+            "emailAddress",
+            "position",
+            "phoneNumber",
+            "room",
+            "building",
+            "department"
+        },
+        tableFieldsUserAndLocation = {
+            "mobileDeviceDetails.username",
+            "mobileDeviceDetails.real_name",
+            "mobileDeviceDetails.email_address",
+            "mobileDeviceDetails.position",
+            "mobileDeviceDetails.phone_number",
+            "mobileDeviceDetails.room",
+            "mobileDeviceDetails.building",
+            "mobileDeviceDetails.department"
+        },
+        apiFieldsSecurity = {
+            "dataProtected",
+            "blockLevelEncryptionCapable",
+            "fileLevelEncryptionCapable",
+            "passcodePresent",
+            "passcodeCompliant",
+            "passcodeCompliantWithProfile",
+            "hardwareEncryption",
+            "activationLockEnabled",
+            "jailBreakDetected",
+            "passcodeLockGracePeriodEnforcedSeconds",
+            "lostModeEnabled",
+            // "lostModePersistent", - not idenfied in legacy model
+            "lostModeMessage",
+            "lostModePhoneNumber",
+            "lostModeFootnote",
+            // expanded below
+            "lostModeLocation", 
+            "lostModeEnabledDate" 
+        },
+        tableFieldsSecurity = {
+            "mobileDeviceDetails.data_protection",
+            "mobileDeviceDetails.block_level_encryption_capable",
+            "mobileDeviceDetails.file_level_encryption_capable",
+            "mobileDeviceDetails.passcode_present",
+            "mobileDeviceDetails.passcode_compliant",
+            "mobileDeviceDetails.passcode_compliant_with_profile",
+            "mobileDeviceDetails.hardware_encryption",
+            "mobileDeviceDetails.activation_lock_enabled",
+            "mobileDeviceDetails.jailbreak_detected",
+            "mobileDeviceDetails.passcode_lock_grace_period_enforced",
+            "mobileDeviceDetails.lost_mode_enabled",
+            "mobileDeviceDetails.lost_mode_message",
+            "mobileDeviceDetails.lost_mode_phone",
+            "mobileDeviceDetails.lost_mode_footnote",
+            // expanded below
+            "lostModeLocation",
+            "mobileDeviceDetails.lost_mode_enable_issued_utc"
+        },
+        apiFieldsLostModeLocation = {
+            "lastLocationUpdate",
+            "lostModeLocationHorizontalAccuracyMeters",
+            "lostModeLocationVerticalAccuracyMeters",
+            "lostModeLocationAltitudeMeters",
+            "lostModeLocationSpeedMetersPerSecond",
+            "lostModeLocationCourseDegrees",
+            "lostModeLocationTimestamp"
+        },
+        tableFieldsLostModeLocation = {
+            "mobileDeviceDetails.lost_location_utc",
+            "mobileDeviceDetails.lost_location_horizontal_accuracy",
+            "mobileDeviceDetails.lost_location_vertical_accuracy",
+            "mobileDeviceDetails.lost_location_altitude",
+            "mobileDeviceDetails.lost_location_speed",
+            "mobileDeviceDetails.lost_location_course",
+            "mobileDeviceDetails.lost_mode_location_timestamp"
+        },
+        apiFieldsNetwork = {
+            "cellularTechnology",
+            "voiceRoamingEnabled",
+            "imei",
+            "iccid",
+            "meid",
+            // "eid",
+            "carrierSettingsVersion",
+            "currentCarrierNetwork",
+            "currentMobileCountryCode",
+            "currentMobileNetworkCode",
+            "homeCarrierNetwork",
+            "homeMobileCountryCode",
+            "homeMobileNetworkCode",
+            "dataRoamingEnabled",
+            "roaming",
+            // "personalHotspotEnabled",
+            "phoneNumber"
+        },
+        tableFieldsNetwork = {
+            "mobileDeviceDetails.cellular_technology",
+            "mobileDeviceDetails.voice_roaming_enabled",
+            "mobileDeviceDetails.imei",
+            "mobileDeviceDetails.iccid",
+            "mobileDeviceDetails.meid",
+            "mobileDeviceDetails.carrier_settings_version",
+            "mobileDeviceDetails.current_carrier_network",
+            "mobileDeviceDetails.current_mobile_country_code",
+            "mobileDeviceDetails.current_mobile_network_code",
+            "mobileDeviceDetails.home_carrier_network",
+            "mobileDeviceDetails.home_mobile_country_code",
+            "mobileDeviceDetails.home_mobile_network_code",
+            "mobileDeviceDetails.data_roaming_enabled",
+            "mobileDeviceDetails.roaming",
+            "mobileDeviceDetails.phone"
+        },
+        apiFieldsPurchasing = {
+            "purchased",
+            "leased",
+            "poNumber",
+            "vendor",
+            "appleCareId",
+            "purchasePrice",
+            "purchasingAccount",
+            "poDate",
+            "warrantyExpiresDate",
+            "leaseExpiresDate",
+            "lifeExpectancy",
+            "purchasingContact"
+        },
+        tableFieldsPurchasing = {
+            "mobileDeviceDetails.is_purchased",
+            "mobileDeviceDetails.is_leased",
+            "mobileDeviceDetails.po_number",
+            "mobileDeviceDetails.vendor",
+            "mobileDeviceDetails.applecare_id",
+            "mobileDeviceDetails.purchase_price",
+            "mobileDeviceDetails.purchasing_account",
+            "mobileDeviceDetails.po_date",
+            "mobileDeviceDetails.warranty_expires",
+            "mobileDeviceDetails.lease_expires",
+            "mobileDeviceDetails.life_expectancy",
+            "mobileDeviceDetails.purchasing_contact"
+        },
+        tableFieldsUnmapped = {
+            "phone_number",
+            "wifi_mac_address",
+            "model",
+            "model_identifier",
+            "modelDisplay",
+            "model_display",
+            "username",
+            "mobileDeviceDetails.last_inventory_update",
+            "mobileDeviceDetails.last_inventory_update_epoch",
+            "mobileDeviceDetails.capacity",
+            "mobileDeviceDetails.available",
+            "mobileDeviceDetails.initial_entry_date_epoch",
+            "mobileDeviceDetails.initial_entry_date_utc",
+            "mobileDeviceDetails.modelDisplay",
+            "mobileDeviceDetails.model_display",
+            "mobileDeviceDetails.last_enrollment_epoch",
+            "mobileDeviceDetails.last_cloud_backup_date_epoch",
+            "mobileDeviceDetails.location_services_enabled",
+            "mobileDeviceDetails.last_backup_time_epoch",
+            "mobileDeviceDetails.realname",
+            "mobileDeviceDetails.po_date_epoch",
+            "mobileDeviceDetails.po_date_utc",
+            "mobileDeviceDetails.warranty_expires_epoch",
+            "mobileDeviceDetails.warranty_expires_utc",
+            "mobileDeviceDetails.lease_expires_epoch",
+            "mobileDeviceDetails.lease_expires_utc",
+            "mobileDeviceDetails.attachments",
+            "mobileDeviceDetails.lost_mode_enforced",
+            "mobileDeviceDetails.lost_mode_enable_issued_epoch",
+            "mobileDeviceDetails.lost_location_epoch",
+            "mobileDeviceDetails.lost_location_latitude",
+            "mobileDeviceDetails.lost_location_longitude"
+        },
+        emptyTable = #table(
+            List.Combine(
+                {
+                    tableFieldsTopLevel,
+                    tableFieldsGeneral,
+                    tableFieldsHardware,
+                    tableFieldsUserAndLocation,
+                    tableFieldsSecurity,
+                    tableFieldsLostModeLocation,
+                    tableFieldsPurchasing,
+                    tableFieldsNetwork
+                }
+            ),
+            {}
         ),
-        mobile_devices_table = Table.Combine(temp_table_mobile[response]),
-        selected_table =
-            try Table.RemoveColumns(mobile_devices_table, "extensionAttributes") otherwise mobile_devices_table,
-        expand_hardware =
-            try
-                Table.ExpandRecordColumn(
-                    selected_table,
-                    "hardware",
-                    {
-                        "capacityMb",
-                        "availableSpaceMb",
-                        "usedSpacePercentage",
-                        "batteryLevel",
-                        "serialNumber",
-                        "wifiMacAddress",
-                        "bluetoothMacAddress",
-                        "modemFirmwareVersion",
-                        "model",
-                        "modelIdentifier",
-                        "modelNumber",
-                        "bluetoothLowEnergyCapable",
-                        "deviceId",
-                        "hardware.extensionAttributes"
-                    }
-                ) otherwise selected_table,
-        expand_general =
-            try
-                Table.ExpandRecordColumn(
-                    expand_hardware,
-                    "general",
-                    {
-                        "udid",
-                        "displayName",
-                        "assetTag",
-                        "siteId",
-                        "lastInventoryUpdateDate",
-                        "osVersion",
-                        "osRapidSecurityResponse",
-                        "osBuild",
-                        "osSupplementalBuildVersion",
-                        "softwareUpdateDeviceId",
-                        "ipAddress",
-                        "managed",
-                        "supervised",
-                        "deviceOwnershipType",
-                        "enrollmentMethodPrestage",
-                        "enrollmentSessionTokenValid",
-                        "lastEnrolledDate",
-                        "mdmProfileExpirationDate",
-                        "timeZone",
-                        "declarativeDeviceManagementEnabled",
-                        "general.extensionAttributes",
-                        "sharedIpad",
-                        "diagnosticAndUsageReportingEnabled",
-                        "appAnalyticsEnabled",
-                        "residentUsers",
-                        "quotaSize",
-                        "temporarySessionOnly",
-                        "temporarySessionTimeout",
-                        "userSessionTimeout",
-                        "syncedToComputer",
-                        "maximumSharediPadUsersStored",
-                        "lastBackupDate",
-                        "deviceLocatorServiceEnabled",
-                        "doNotDisturbEnabled",
-                        "cloudBackupEnabled",
-                        "lastCloudBackupDate",
-                        "locationServicesForSelfServiceMobileEnabled",
-                        "itunesStoreAccountActive",
-                        "exchangeDeviceId",
-                        "tethered"
-                    }
-                ) otherwise expand_hardware,
-        null_updates =
-            try
-                Table.TransformColumns(expand_general, {{"security", each if _ = null then [] else _}})
-            otherwise
-                expand_general,
-        expand_security =
-            try
-                Table.ExpandRecordColumn(
-                    null_updates,
-                    "security",
-                    {
-                        "dataProtected",
-                        "blockLevelEncryptionCapable",
-                        "fileLevelEncryptionCapable",
-                        "passcodePresent",
-                        "passcodeCompliant",
-                        "passcodeCompliantWithProfile",
-                        "hardwareEncryption",
-                        "activationLockEnabled",
-                        "jailBreakDetected",
-                        "passcodeLockGracePeriodEnforcedSeconds",
-                        "personalDeviceProfileCurrent",
-                        "lostModeEnabled",
-                        "lostModePersistent",
-                        "lostModeMessage",
-                        "lostModePhoneNumber",
-                        "lostModeFootnote",
-                        "lostModeLocation",
-                        "lostModeEnabledDate"
-                    }
-                ) otherwise null_updates
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages,
+                        each
+                            getPageMobileDevices(
+                                url, authType, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "SECURITY", "NETWORK", "PURCHASING"}, _
+                            )
+                    ),
+                    rowPerDevice = List.Combine(listOfPages),
+                    selectedColumns = Table.FromRecords(
+                        rowPerDevice,
+                        {"mobileDeviceId", "deviceType", "general", "hardware", "userAndLocation", "security", "purchasing", "network"},
+                        MissingField.UseNull
+                    ),
+                    renameTopLevelFields = Table.RenameColumns(
+                        selectedColumns, List.Zip({apiFieldsTopLevel, tableFieldsTopLevel})
+                    ),
+                    expandGeneral = Table.ExpandRecordColumn(
+                        renameTopLevelFields, "general", apiFieldsGeneral, tableFieldsGeneral
+                    ),
+                    expandHardware = Table.ExpandRecordColumn(
+                        expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware
+                    ),
+                    expandUserAndLocation = Table.ExpandRecordColumn(
+                        expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation
+                    ),
+                    expandSecurity = Table.ExpandRecordColumn(
+                        expandUserAndLocation, "security", apiFieldsSecurity, tableFieldsSecurity
+                    ),
+                    expandLostModeLocation = Table.ExpandRecordColumn(
+                        expandSecurity, "lostModeLocation", apiFieldsLostModeLocation, tableFieldsLostModeLocation
+                    ),
+                    expandPurchasing = Table.ExpandRecordColumn(
+                        expandLostModeLocation, "purchasing", apiFieldsPurchasing, tableFieldsPurchasing
+                    ),
+                    expandNetwork = Table.ExpandRecordColumn(
+                        expandPurchasing, "network", apiFieldsNetwork, tableFieldsNetwork
+                    )
+                in
+                    expandNetwork,
+        // duplicate the name column as device_name. we need the same value in both columns for strict backward compatibility
+        compatibleDisplayName = Table.AddColumn(result, "device_name", each [name], type text),
+        compatibleSerialNumber = Table.AddColumn(
+            compatibleDisplayName, "serial_number", each [mobileDeviceDetails.serial_number], type text
+        )
     in
-        expand_security;
+        result;
 
 mobileDeviceApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
