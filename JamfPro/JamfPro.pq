@@ -34,20 +34,18 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
     let
         url = validateUrlScheme(url),
         authType = if authType = null then "UsernamePassword" else validateAuthType(authType),
-        computerPageCount = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
-        mobileDevicesPageCount = getTotalNumberOfPages(url, authType, "v2/mobile-devices"),
+        computerPages = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
+        mobileDevicesPages = getTotalNumberOfPages(url, authType, "v2/mobile-devices"),
         pages_table = initializeComputerRecord(url, authType),
         pages_table_mobile = initializeMobileRecord(url, authType),
-        computer_device_groups = initializeComputerGroupRecord(url, authType),
-        mobile_device_groups = initializeMobileGroupRecord(url, authType),
         source = #table(
             {"Name", "Data", "ItemKind", "ItemName", "IsLeaf"},
             {
                 {"Computers", computersImplementation(url, authType, pages_table), "Table", "Table", true},
-                {"Computer Device Groups", computer_device_groups, "Table", "Table", true},
+                {"Computer Device Groups", computerGroups(url, authType), "Table", "Table", true},
                 {
                     "Computers - Applications",
-                    getComputerApplications(url, authType, computerPageCount),
+                    computerApplications(url, authType, computerPages),
                     "Table",
                     "Table",
                     true
@@ -61,12 +59,12 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                 },
                 {
                     "Mobile - Applications",
-                    getMobileDeviceApplications(url, authType, mobileDevicesPageCount),
+                    mobileDeviceApplications(url, authType, mobileDevicesPages),
                     "Table",
                     "Table",
                     true
                 },
-                {"Mobile Device Groups", mobile_device_groups, "Table", "Table", true}
+                {"Mobile Device Groups", mobileDeviceGroups(url, authType), "Table", "Table", true}
             }
         ),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -100,13 +98,13 @@ getTotalNumberOfPages = (url as text, authType as text, relativePath as text) as
     in
         pages;
 
-getComputersOnePage = (url as text, authType as text, sections as list, page as number) as list =>
-    getOnePage(url, authType, sections, page, "api/v1/computers-inventory", "id");
+getPageComputers = (url as text, authType as text, sections as list, page as number) as list =>
+    getPage(url, authType, sections, page, "api/v1/computers-inventory", "id");
 
-getMobileDevicesOnePage = (url as text, authType as text, sections as list, page as number) as list =>
-    getOnePage(url, authType, sections, page, "api/v2/mobile-devices/detail", "mobileDeviceId");
+getPageMobileDevices = (url as text, authType as text, sections as list, page as number) as list =>
+    getPage(url, authType, sections, page, "api/v2/mobile-devices/detail", "mobileDeviceId");
 
-getOnePage = (url as text, authType as text, sections as list, page as number, path as text, sortKey as text) as list =>
+getPage = (url as text, authType as text, sections as list, page as number, path as text, sortKey as text) as list =>
     let
         result = UAPIResource(
             url,
@@ -143,7 +141,7 @@ initializeMobileRecord = (url as text, authType as text) as table =>
     in
         pages_table_mobile;
 
-initializeMobileGroupRecord = (url as text, authType as text) as table =>
+mobileDeviceGroups = (url as text, authType as text) as table =>
     let
         jsonDeviceGroups = JSSResource(url, authType, "/mobiledevicegroups"),
         deviceGroups = Table.FromRecords(jsonDeviceGroups[mobile_device_groups]),
@@ -168,7 +166,7 @@ initializeMobileGroupRecord = (url as text, authType as text) as table =>
     in
         mobileDeviceGroupExpanded;
 
-initializeComputerGroupRecord = (url as text, authType as text) as table =>
+computerGroups = (url as text, authType as text) as table =>
     let
         jsonComputerGroups = JSSResource(url, authType, "/computergroups"),
         computerGroups = Table.FromRecords(jsonComputerGroups[computer_groups]),
@@ -555,7 +553,7 @@ computersImplementation = (baseUrl as text, authType as text, pages_table as tab
     in
         expand_security;
 
-getComputerApplications = (url as text, authType as text, totalPagesCount as number) as table =>
+computerApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
         fieldNamesFromApi = {"name", "path", "version"},
         fieldNamesForTable = {
@@ -571,7 +569,7 @@ getComputerApplications = (url as text, authType as text, totalPagesCount as num
                 let
                     pages = {0..totalPagesCount - 1},
                     listOfPages = List.Transform(
-                        pages, each getComputersOnePage(url, authType, {"GENERAL, APPLICATIONS"}, _)
+                        pages, each getPageComputers(url, authType, {"GENERAL, APPLICATIONS"}, _)
                     ),
                     rowPerComputer = List.Combine(listOfPages),
                     data = Table.FromRecords(rowPerComputer),
@@ -735,7 +733,7 @@ mobileDevicesImplementation = (baseUrl as text, authType as text, pages_table as
     in
         expand_security;
 
-getMobileDeviceApplications = (url as text, authType as text, totalPagesCount as number) as table =>
+mobileDeviceApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
         apiFieldsGeneral = {"displayName", "udid", "managed", "supervised"},
         tableFieldsGeneral = {"name", "udid", "managed", "supervised"},
@@ -764,7 +762,7 @@ getMobileDeviceApplications = (url as text, authType as text, totalPagesCount as
                     listOfPages = List.Transform(
                         pages,
                         each
-                            getMobileDevicesOnePage(
+                            getPageMobileDevices(
                                 url, authType, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _
                             )
                     ),
@@ -797,6 +795,7 @@ getMobileDeviceApplications = (url as text, authType as text, totalPagesCount as
         compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
     in
         compatibleModelDisplay;
+
 // Data Source Kind description
 JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
