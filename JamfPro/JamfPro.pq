@@ -49,6 +49,7 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                     "Table",
                     true
                 },
+                {"Computers - Extension attributes", computerExtensionAttributes(url, authType, computerPages), "Table", "Table", true},
                 {"Mobile Devices", mobileDevices(url, authType, mobileDevicesPages),
                 "Table", "Table", true},
                 {
@@ -58,7 +59,8 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
                     "Table",
                     true
                 },
-                {"Mobile Device Groups", mobileDeviceGroups(url, authType), "Table", "Table", true}
+                {"Mobile Device Groups", mobileDeviceGroups(url, authType), "Table", "Table", true},
+                {"Mobile Devices - ExtensionAttributes", mobileDeviceExtensionAtttributes(url, authType, mobileDevicesPages), "Table", "Table", true}
             }
         ),
         navTable = Table.ToNavigationTable(source, {"Name"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
@@ -340,7 +342,7 @@ computerApplications = (url as text, authType as text, totalPagesCount as number
                 let
                     pages = {0..totalPagesCount - 1},
                     listOfPages = List.Transform(
-                        pages, each getPageComputers(url, authType, {"GENERAL, APPLICATIONS"}, _)
+                        pages, each getPageComputers(url, authType, {"GENERAL", "APPLICATIONS"}, _)
                     ),
                     rowPerComputer = List.Combine(listOfPages),
                     data = Table.FromRecords(rowPerComputer),
@@ -568,6 +570,131 @@ mobileDeviceApplications = (url as text, authType as text, totalPagesCount as nu
     in
         compatibleModelDisplay;
 
+computerExtensionAttributes = (url as text, authType as text, totalPagesCount as number) as table =>
+    let
+        fieldNamesForTable = {"computerDetails.extAttrs.id", "computerDetails.extAttrs.name", "computerDetails.extAttrs.type", "computerDetails.extAttrs.value"} ,
+        emptyTable = #table(List.Combine({{"id", "name"}, fieldNamesForTable}), {}),
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages, each getPageComputers(
+                            url, authType, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "OPERATING_SYSTEM", "EXTENSION_ATTRIBUTES"}, _
+                        )
+                    ),
+                    rowPerComputer = List.Combine(listOfPages),
+                    data = Table.FromRecords(rowPerComputer),
+                    selectedColumns = Table.SelectColumns(data, {"id", "general", "hardware", "userAndLocation", "purchasing", "operatingSystem", "extensionAttributes"}),
+
+                    expandGeneral = Table.ExpandRecordColumn(selectedColumns, "general", {"name", "extensionAttributes"}, {"name", "general.extensionAttributes"}),
+                    expandHardware = Table.ExpandRecordColumn(expandGeneral, "hardware", {"extensionAttributes"}, {"hardware.extensionAttributes"}),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandHardware, "userAndLocation", {"extensionAttributes"}, {"userAndLocation.extensionAttributes"}),
+                    expandPurchasing = Table.ExpandRecordColumn(expandUserAndLocation, "purchasing", {"extensionAttributes"}, {"purchasing.extensionAttributes"}),
+                    expandOperatingSystem = Table.ExpandRecordColumn(expandPurchasing, "operatingSystem", {"extensionAttributes"}, {"operatingSystem.extensionAttributes"}),
+
+                    eaApiFields = [id = "definitionId", name = "name", dataType = "dataType", value = "values"],
+                    eaTableFields = [id = "computerDetails.extAttrs.id", name = "computerDetails.extAttrs.name", dataType = "computerDetails.extAttrs.type", value = "computerDetails.extAttrs.value"],
+                    generalNormalized = normalizeEAs(expandOperatingSystem, "general.extensionAttributes", eaApiFields, eaTableFields),
+                    hardwareNormalized = normalizeEAs(expandOperatingSystem, "hardware.extensionAttributes", eaApiFields, eaTableFields),
+                    userAndLocationNormalized = normalizeEAs(expandOperatingSystem, "userAndLocation.extensionAttributes", eaApiFields, eaTableFields),
+                    purchasingNormalized = normalizeEAs(expandOperatingSystem, "purchasing.extensionAttributes", eaApiFields, eaTableFields),
+                    operatingSystemNormalized = normalizeEAs(expandOperatingSystem, "operatingSystem.extensionAttributes", eaApiFields, eaTableFields),
+                    extensionAttributesNormalized = normalizeEAs(expandOperatingSystem, "extensionAttributes", eaApiFields, eaTableFields),
+                    combinedEAs = Table.Combine({generalNormalized, hardwareNormalized, userAndLocationNormalized, purchasingNormalized, operatingSystemNormalized, extensionAttributesNormalized}),
+
+                    finalColumns = Table.SelectColumns(combinedEAs, List.Combine({{"id", "name"}, fieldNamesForTable}))
+                in
+                    finalColumns
+    in
+        result;
+
+mobileDeviceExtensionAtttributes = (url as text, authType as text, totalPagesCount as number) as table =>
+    let
+        apiFieldsGeneral = {"displayName", "udid", "managed", "supervised", "extensionAttributes"},
+        tableFieldsGeneral = {"name", "udid", "managed", "supervised", "general.extensionAttributes"},
+        apiFieldsHardware = {"serialNumber", "wifiMacAddress", "model", "modelIdentifier", "extensionAttributes"},
+        tableFieldsHardware = {"serial_number", "wifi_mac_address", "model", "model_identifier", "hardware.extensionAttributes"},
+        apiFieldsUserAndLocation = {"phoneNumber", "username", "extensionAttributes"},
+        tableFieldsUserAndLocation = {"phone_number", "username", "userAndLocation.extensionAttributes"},
+
+        // final column names, including tableFieldsGeneral, tableFieldsHardware, and tableFieldsUserAndLocation, minus anything with `extensionAttributes` in it
+        eaFieldNames = {"ExtAttrId", "ExtAttrName", "ExtAttrType", "ExtAttrVal"},
+        finalColumnNames = List.Combine(
+            {
+                {"id"},
+                List.RemoveItems(tableFieldsGeneral, {"general.extensionAttributes"}),
+                List.RemoveItems(tableFieldsHardware, {"hardware.extensionAttributes"}),
+                List.RemoveItems(tableFieldsUserAndLocation, {"userAndLocation.extensionAttributes"}),
+                eaFieldNames
+            }
+        ),
+
+        // TODO, empty table won't have correct columns here since things like `extensionAttributes` are expanded later. verify other tables, as well.
+        emptyTable = #table(
+            finalColumnNames,
+            {}
+        ),
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages,
+                        each
+                            getPageMobileDevices(
+                                url, authType, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "EXTENSION_ATTRIBUTES"}, _
+                            )
+                    ),
+                    rowPerDevice = List.Combine(listOfPages),
+                    selectedColumns = Table.FromRecords(
+                        rowPerDevice,
+                        {"mobileDeviceId", "general", "hardware", "userAndLocation", "purchasing", "extensionAttributes"},
+                        MissingField.UseNull
+                    ),
+                    renameIdField = Table.RenameColumns(selectedColumns, {{"mobileDeviceId", "id"}}),
+                    expandGeneral = Table.ExpandRecordColumn(renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral),
+                    expandHardware = Table.ExpandRecordColumn(expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation),
+                    expandPurchasing = Table.ExpandRecordColumn(expandUserAndLocation, "purchasing", {"extensionAttributes"}, {"purchasing.extensionAttributes"}),
+
+                    eaApiFields = [id = "id", name = "name", dataType = "type", value = "value"],
+                    eaTableFields = [id = "ExtAttrId", name = "ExtAttrName", dataType = "ExtAttrType", value = "ExtAttrVal"],
+                    generalNormalized = normalizeEAs(expandPurchasing, "general.extensionAttributes", eaApiFields, eaTableFields),
+                    userAndLocationNormalized = normalizeEAs(expandPurchasing, "userAndLocation.extensionAttributes", eaApiFields, eaTableFields),
+                    hardwareNormalized = normalizeEAs(expandPurchasing, "hardware.extensionAttributes", eaApiFields, eaTableFields),
+                    purchasingNormalized = normalizeEAs(expandPurchasing, "purchasing.extensionAttributes", eaApiFields, eaTableFields),
+                    extensionAttributesNormalized = normalizeEAs(expandPurchasing, "extensionAttributes", eaApiFields, eaTableFields),
+                    combinedEAs = Table.Combine({generalNormalized, userAndLocationNormalized, hardwareNormalized, purchasingNormalized, extensionAttributesNormalized})
+                in
+                    combinedEAs,
+
+        finalColumns = Table.SelectColumns(result, finalColumnNames),
+
+        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
+        compatibleDisplayName = Table.AddColumn(finalColumns, "display_name", each [name], type text),
+        // do the same for model, copying it to both modelDisplay and model_display
+        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
+        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
+    in
+        compatibleModelDisplay;
+
+normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields as record) as table =>
+    let
+        normalizeEAs = Table.ExpandListColumn(t, columnName),
+        expandEAs = Table.ExpandRecordColumn(
+            normalizeEAs, columnName, {apiFields[id], apiFields[name], apiFields[dataType], apiFields[value]}, {tableFields[id], tableFields[name], tableFields[dataType], tableFields[value]}
+        ),
+        expandValues = Table.ExpandListColumn(expandEAs, tableFields[value]),
+        filteredEAs = Table.SelectRows(expandValues, each Record.Field(_, tableFields[id]) <> null),
+        result = Table.RemoveColumns(filteredEAs, {columnName}, MissingField.Ignore)
+    in
+        result;
+
 // Data Source Kind description
 JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
@@ -583,7 +710,7 @@ JamfPro = [
 
 // Data Source UI publishing description
 JamfPro.Publish = [
-    Beta = true,
+    Beta = false,
     Category = "Other",
     ButtonText = {"Jamf Pro", "Import data from Jamf Pro"},
     LearnMoreUrl = "https://www.jamf.com/",
