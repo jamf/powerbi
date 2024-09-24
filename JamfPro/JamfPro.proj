@@ -8,7 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <MezContent Include="JamfPro.pq" />
-    <MezContent Include="FieldMappings.pqm" />
+    <MezContent Include="MobileDeviceMappings.pqm" />
+    <MezContent Include="ComputerMappings.pqm" />
     <MezContent Include="JamfPro16.png" />
     <MezContent Include="JamfPro24.png" />
     <MezContent Include="JamfPro32.png" />

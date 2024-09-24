@@ -37,11 +37,10 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
         authType = if authType = null then "UsernamePassword" else validateAuthType(authType),
         computerPages = getTotalNumberOfPages(url, authType, "v1/computers-inventory"),
         mobileDevicesPages = getTotalNumberOfPages(url, authType, "v2/mobile-devices"),
-        pages_table = initializeComputerRecord(url, authType),
         source = #table(
             {"Name", "Data", "ItemKind", "ItemName", "IsLeaf"},
             {
-                {"Computers", computersImplementation(url, authType, pages_table), "Table", "Table", true},
+                {"Computers", computers(url, authType, computerPages), "Table", "Table", true},
                 {"Computer Device Groups", computerGroups(url, authType), "Table", "Table", true},
                 {
                     "Computers - Applications",
@@ -72,6 +71,7 @@ validateUrlScheme = (url as text) as text =>
         error "Url scheme must be HTTPS"
     else
         removeTrailingSlash(url);
+
 validateAuthType = (authType as text) as text =>
     if (authType <> "ClientCredentials" and authType <> "UsernamePassword") then
         "UsernamePassword"
@@ -114,18 +114,6 @@ getPage = (url as text, authType as text, sections as list, page as number, path
         )[results]
     in
         result;
-
-// initialization functions:
-// these functions set the page tables for the global records
-initializeComputerRecord = (url as text, authType as text) as table =>
-    let
-        // number of total devices in computer inventory record
-        devices_count = UAPIResource(url, authType, "api/v1/computers-inventory")[totalCount],
-        pages = Number.RoundDown(devices_count / pageSize),
-        page_list = {1..pages},
-        pages_table = Table.FromList(List.Transform(page_list, Text.From))
-    in
-        pages_table;
 
 mobileDeviceGroups = (url as text, authType as text) as table =>
     let
@@ -336,209 +324,6 @@ TokenAuthorizationHeader = (baseUrl as text, authType as text, optional isRetry 
     in
         token_header;
 
-// implementation functions:
-// these correspond directly with their named table in the JamfNavTable
-// these queries handle getting the specific data and setting table with types
-// start of computers queries
-computersImplementation = (baseUrl as text, authType as text, pages_table as table) as table =>
-    let
-        sections = List.Transform(
-            {
-                "General",
-                "Hardware",
-                "Operating_System",
-                "User_And_Location",
-                "Purchasing",
-                "Disk_Encryption",
-                "Security"
-            },
-            Text.Upper
-        ),
-        temp_table = Table.AddColumn(
-            pages_table,
-            "response",
-            each
-                Table.FromRecords(
-                    UAPIResource(
-                        baseUrl,
-                        authType,
-                        "api/v1/computers-inventory",
-                        [
-                            #"page-size" = Text.From(pageSize),
-                            page = Text.From(Number.From(_[Column1]) - 1),
-                            section = sections
-                        ]
-                    )[results]
-                )
-        ),
-        computer_table = Table.Combine(temp_table[response]),
-        selected_table = try Table.RemoveColumns(computer_table, "extensionAttributes") otherwise computer_table,
-        expand_general =
-            try
-                Table.ExpandRecordColumn(
-                    selected_table,
-                    "general",
-                    {
-                        "name",
-                        "lastIpAddress",
-                        "lastReportedIp",
-                        "jamfBinaryVersion",
-                        "platform",
-                        "barcode1",
-                        "barcode2",
-                        "assetTag",
-                        "remoteManagement",
-                        "supervised",
-                        "mdmCapable",
-                        "reportDate",
-                        "lastContactTime",
-                        "lastCloudBackupDate",
-                        "lastEnrolledDate",
-                        "mdmProfileExpiration",
-                        "initialEntryDate",
-                        "distributionPoint",
-                        "site",
-                        "itunesStoreAccountActive",
-                        "enrolledViaAutomatedDeviceEnrollment",
-                        "userApprovedMdm",
-                        "enrollmentMethod"
-                    }
-                ) otherwise selected_table,
-        expand_disk_encryption =
-            try
-                Table.ExpandRecordColumn(
-                    expand_general,
-                    "diskEncryption",
-                    {
-                        "individualRecoveryKeyValidityStatus",
-                        "institutionalRecoveryKeyPresent",
-                        "diskEncryptionConfigurationName",
-                        "fileVault2EligibilityMessage",
-                        "fileVault2EnabledUserNames",
-                        "bootPartitionEncryptionDetails"
-                    }
-                ) otherwise expand_general,
-        expand_purchasing =
-            try
-                Table.ExpandRecordColumn(
-                    expand_disk_encryption,
-                    "purchasing",
-                    {
-                        "purchased",
-                        "leased",
-                        "poNumber",
-                        "lifeExpectancy",
-                        "purchasePrice",
-                        "purchasingAccount",
-                        "purchasingContact",
-                        "appleCareId",
-                        "vendor",
-                        "leaseDate",
-                        "poDate",
-                        "warrantyDate"
-                    }
-                ) otherwise expand_disk_encryption,
-        expand_user_and_location =
-            try
-                Table.ExpandRecordColumn(
-                    expand_purchasing,
-                    "userAndLocation",
-                    {"username", "realname", "email", "position", "phone", "departmentId", "buildingId", "room"}
-                ) otherwise expand_purchasing,
-        expand_hardware =
-            try
-                Table.ExpandRecordColumn(
-                    expand_user_and_location,
-                    "hardware",
-                    {
-                        "make",
-                        "model",
-                        "modelIdentifier",
-                        "serialNumber",
-                        "processorSpeedMhz",
-                        "processorCount",
-                        "coreCount",
-                        "processorType",
-                        "processorArchitecture",
-                        "busSpeedMhz",
-                        "cacheSizeKilobytes",
-                        "networkAdapterType",
-                        "macAddress",
-                        "altNetworkAdapterType",
-                        "altMacAddress",
-                        "totalRamMegabytes",
-                        "openRamSlots",
-                        "batteryCapacityPercent",
-                        "smcVersion",
-                        "nicSpeed",
-                        "opticalDrive",
-                        "bootRom",
-                        "bleCapable",
-                        "supportsIosAppInstalls",
-                        "appleSilicon"
-                    }
-                ) otherwise expand_user_and_location,
-        expand_operating_system =
-            try
-                Table.ExpandRecordColumn(
-                    expand_hardware,
-                    "operatingSystem",
-                    {
-                        "name",
-                        "version",
-                        "build",
-                        "activeDirectoryStatus",
-                        "fileVault2Status",
-                        "softwareUpdateDeviceId"
-                    },
-                    {
-                        "os name",
-                        "os version",
-                        "os build",
-                        "activeDirectoryStatus",
-                        "fileVault2Status",
-                        "softwareUpdateDeviceId"
-                    }
-                ) otherwise expand_hardware,
-        expand_remote_management =
-            try
-                Table.ExpandRecordColumn(
-                    expand_operating_system, "remoteManagement", {"managed", "managementUsername"}
-                ) otherwise expand_operating_system,
-        expand_mdm_capable =
-            try
-                Table.ExpandRecordColumn(expand_remote_management, "mdmCapable", {"capable", "capableUsers"})
-            otherwise
-                expand_remote_management,
-        expand_site =
-            try
-                Table.ExpandRecordColumn(expand_mdm_capable, "site", {"id", "name"}, {"siteId", "siteName"})
-            otherwise
-                expand_mdm_capable,
-        expand_fileVault2_enabled_usernames =
-            try Table.ExpandListColumn(expand_site, "fileVault2EnabledUserNames") otherwise expand_site,
-        expand_security =
-            try
-                Table.ExpandRecordColumn(
-                    expand_fileVault2_enabled_usernames,
-                    "security",
-                    {
-                        "sipStatus",
-                        "gatekeeperStatus",
-                        "xprotectVersion",
-                        "autoLoginDisabled",
-                        "remoteDesktopEnabled",
-                        "activationLockEnabled",
-                        "secureBootLevel",
-                        "externalBootLevel",
-                        "bootstrapTokenAllowed",
-                        "recoveryLockEnabled",
-                        "firewallEnabled"
-                    }
-                ) otherwise expand_fileVault2_enabled_usernames
-    in
-        expand_security;
-
 computerApplications = (url as text, authType as text, totalPagesCount as number) as table =>
     let
         fieldNamesFromApi = {"name", "path", "version"},
@@ -570,6 +355,71 @@ computerApplications = (url as text, authType as text, totalPagesCount as number
     in
         result;
 
+// Computer lookup and mapping function. See notes on mobileDevices function for backward compatibility.
+computers = (url as text, authType as text, totalPagesCount as number) as table =>
+    let
+        tableFieldsTopLevel = {"id", "computerDetails.udid"},
+        emptyTable = #table(
+            List.Combine(
+                {
+                    tableFieldsTopLevel,
+                    ComputerMappings[TableGeneral]
+                }
+            ),
+            {}
+        ),
+        result =
+            if totalPagesCount = 0 then
+                emptyTable
+            else
+                let
+                    pages = {0..totalPagesCount - 1},
+                    listOfPages = List.Transform(
+                        pages,
+                        each
+                            getPageComputers(
+                                url, authType, {"GENERAL", "DISK_ENCRYPTION", "PURCHASING", "USER_AND_LOCATION", "HARDWARE", "SECURITY", "OPERATING_SYSTEM"}, _
+                            )
+                    ),
+                    rowPerDevice = List.Combine(listOfPages),
+                    selectedColumns = Table.FromRecords(
+                        rowPerDevice,
+                        {"id", "udid", "general", "diskEncryption", "purchasing", "userAndLocation", "hardware", "security", "operatingSystem"},
+                        MissingField.UseNull
+                    ),
+                    renameUdid = Table.RenameColumns(selectedColumns, {{"udid", "computerDetails.udid"}}),
+                    expandGeneral = Table.ExpandRecordColumn(
+                        renameUdid, "general", ComputerMappings[ApiGeneral], ComputerMappings[TableGeneral]
+                    ),
+                    expandRemoteManagement = Table.ExpandRecordColumn(
+                        expandGeneral, "remoteManagement", ComputerMappings[ApiRemoteManagement], ComputerMappings[TableRemoteManagement]
+                    ),
+                    expandMdmCapable = Table.ExpandRecordColumn(
+                        expandRemoteManagement, "mdmCapable", ComputerMappings[ApiMdmCapable], ComputerMappings[TableMdmCapable]
+                    ),
+                    expandDiskEncryption = Table.ExpandRecordColumn(
+                        expandMdmCapable, "diskEncryption", ComputerMappings[ApiDiskEncryption], ComputerMappings[TableDiskEncryption]
+                    ),
+                    expandPurchasing = Table.ExpandRecordColumn(
+                        expandDiskEncryption, "purchasing", ComputerMappings[ApiPurchasing], ComputerMappings[TablePurchasing]
+                    ),
+                    expandUserAndLocation = Table.ExpandRecordColumn(
+                        expandPurchasing, "userAndLocation", ComputerMappings[ApiUserAndLocation], ComputerMappings[TableUserAndLocation]
+                    ),
+                    expandHardware = Table.ExpandRecordColumn(
+                        expandUserAndLocation, "hardware", ComputerMappings[ApiHardware], ComputerMappings[TableHardware]
+                    ),
+                    expandSecurity = Table.ExpandRecordColumn(
+                        expandHardware, "security", ComputerMappings[ApiSecurity], ComputerMappings[TableSecurity]
+                    ),
+                    expandOperatingSystem = Table.ExpandRecordColumn(
+                        expandSecurity, "operatingSystem", ComputerMappings[ApiOperatingSystem], ComputerMappings[TableOperatingSystem]
+                    )
+                in
+                    expandOperatingSystem
+    in
+        result;
+
 // Mobile device lookup and mapping function.
 //
 // Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
@@ -591,13 +441,13 @@ mobileDevices = (url as text, authType as text, totalPagesCount as number) as ta
             List.Combine(
                 {
                     tableFieldsTopLevel,
-                    FieldMappings[TableGeneralMobileDevice],
-                    FieldMappings[TableHardwareMobileDevice],
-                    FieldMappings[TableUserAndLocationMobileDevice],
-                    FieldMappings[TableSecurityMobileDevice],
-                    FieldMappings[TableLostModeLocationMobileDevice],
-                    FieldMappings[TablePurchasingMobileDevice],
-                    FieldMappings[TableNetworkMobileDevice]
+                    MobileDeviceMappings[TableGeneral],
+                    MobileDeviceMappings[TableHardware],
+                    MobileDeviceMappings[TableUserAndLocation],
+                    MobileDeviceMappings[TableSecurity],
+                    MobileDeviceMappings[TableLostModeLocation],
+                    MobileDeviceMappings[TablePurchasing],
+                    MobileDeviceMappings[TableNetwork]
                 }
             ),
             {}
@@ -625,25 +475,25 @@ mobileDevices = (url as text, authType as text, totalPagesCount as number) as ta
                         selectedColumns, List.Zip({apiFieldsTopLevel, tableFieldsTopLevel})
                     ),
                     expandGeneral = Table.ExpandRecordColumn(
-                        renameTopLevelFields, "general", FieldMappings[ApiGeneralMobileDevice], FieldMappings[TableGeneralMobileDevice]
+                        renameTopLevelFields, "general", MobileDeviceMappings[ApiGeneral], MobileDeviceMappings[TableGeneral]
                     ),
                     expandHardware = Table.ExpandRecordColumn(
-                        expandGeneral, "hardware", FieldMappings[ApiHardwareMobileDevice], FieldMappings[TableHardwareMobileDevice]
+                        expandGeneral, "hardware", MobileDeviceMappings[ApiHardware], MobileDeviceMappings[TableHardware]
                     ),
                     expandUserAndLocation = Table.ExpandRecordColumn(
-                        expandHardware, "userAndLocation", FieldMappings[ApiUserAndLocationMobileDevice], FieldMappings[TableUserAndLocationMobileDevice]
+                        expandHardware, "userAndLocation", MobileDeviceMappings[ApiUserAndLocation], MobileDeviceMappings[TableUserAndLocation]
                     ),
                     expandSecurity = Table.ExpandRecordColumn(
-                        expandUserAndLocation, "security", FieldMappings[ApiSecurityMobileDevice], FieldMappings[TableSecurityMobileDevice]
+                        expandUserAndLocation, "security", MobileDeviceMappings[ApiSecurity], MobileDeviceMappings[TableSecurity]
                     ),
                     expandLostModeLocation = Table.ExpandRecordColumn(
-                        expandSecurity, "lostModeLocation", FieldMappings[ApiLostModeLocationMobileDevice], FieldMappings[TableLostModeLocationMobileDevice]
+                        expandSecurity, "lostModeLocation", MobileDeviceMappings[ApiLostModeLocation], MobileDeviceMappings[TableLostModeLocation]
                     ),
                     expandPurchasing = Table.ExpandRecordColumn(
-                        expandLostModeLocation, "purchasing", FieldMappings[ApiPurchasingMobileDevice], FieldMappings[TablePurchasingMobileDevice]
+                        expandLostModeLocation, "purchasing", MobileDeviceMappings[ApiPurchasing], MobileDeviceMappings[TablePurchasing]
                     ),
                     expandNetwork = Table.ExpandRecordColumn(
-                        expandPurchasing, "network", FieldMappings[ApiNetworkMobileDevice], FieldMappings[TableNetworkMobileDevice]
+                        expandPurchasing, "network", MobileDeviceMappings[ApiNetwork], MobileDeviceMappings[TableNetwork]
                     )
                 in
                     expandNetwork,
@@ -793,4 +643,5 @@ Extension.LoadFunction = (fileName as text) =>
             Detail = [File = fileName, Error = e]
         ];
 
-FieldMappings = Extension.LoadFunction("FieldMappings.pqm");
+MobileDeviceMappings = Extension.LoadFunction("MobileDeviceMappings.pqm");
+ComputerMappings = Extension.LoadFunction("ComputerMappings.pqm");
