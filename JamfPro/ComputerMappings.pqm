@@ -106,36 +106,45 @@
     OperatingSystem =   [api = ApiFields(OperatingSystemFields),    mapped = TableFields(OperatingSystemFields)],
 
     /**
+    * These date/time fields are both mapped directly and converted to an `_epoch` column
+    * format for compatibility with the legacy model. See the `copyUtcColumnsToEpoch`
+    * function for detail.
+    */
+    UtcColumnNames = {
+        "computerDetails.report_date_utc",
+        "computerDetails.last_contact_time_utc",
+        "computerDetails.last_cloud_backup_date_utc",
+        "computerDetails.last_enrolled_date_utc",
+        "computerDetails.initial_entry_date_utc",
+        "computerDetails.lease_expires_utc",
+        "computerDetails.po_date_utc",
+        "computerDetails.warranty_expires_utc"
+    },
+
+    /**
     * Fields that are not mapped to the legacy model, included here for reference.
     * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
     * these fields will be removed. 
     *
-    * Some of the fields (like `_date` and `_date_epoch` variants) are already mapped
-    * to the legacy model using the `_utc` variants. Others did not have an analog in
-    * the Jamf Pro API.
+    * Some generic date/time fields like `computerDetails.report_date` have been
+    * omitted in favor of their `_utc` and `_epoch` variants.
+    *
+    * Others fields may not have had a direct analog in the Jamf Pro API.
     */
     UnmappedFields = {
         "computerDetails.country_name",
         "computerDetails.remote_management.management_password_sha256",
         "computerDetails.management_status",
         "computerDetails.report_date",
-        "computerDetails.report_date_epoch",
         "computerDetails.last_contact_time",
-        "computerDetails.last_contact_time_epoch",
         "computerDetails.initial_entry_date",
-        "computerDetails.initial_entry_date_epoch",
-        "computerDetails.last_cloud_backup_date_epoch",
-        "computerDetails.last_enrolled_date_epoch",
         "computerDetails.sus",
         "computerDetails.netboot_server",
         "computerDetails.real_name",
         "computerDetails.phone_number",
         "computerDetails.po_date",
-        "computerDetails.po_date_epoch",
         "computerDetails.warranty_expires",
-        "computerDetails.warranty_expires_epoch",
         "computerDetails.lease_expires",
-        "computerDetails.lease_expires_epoch",
         "computerDetails.os_applecare_id",
         "computerDetails.os_maintenance_expires",
         "computerDetails.attachments",

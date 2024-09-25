@@ -1,8 +1,8 @@
 ﻿[Version = "2.0.0"]
 section JamfPro;
 
-pageSize = 100;
-EnableTraceOutput = true;
+// Number of computer or mobile device records to request per page.
+PAGE_SIZE = 100;
 
 [DataSource.Kind = "JamfPro", Publish = "JamfPro.Publish"]
 // gets initial jamf URL from user; uses this to make requests
@@ -76,9 +76,9 @@ removeTrailingSlash = (url as text) as text =>
 getTotalNumberOfPages = (url as text, authType as text, relativePath as text) as number =>
     let
         totalCount = UAPIResource(
-            url, authType, "api/" & relativePath, [#"page-size" = Text.From(pageSize)]
+            url, authType, "api/" & relativePath, [#"page-size" = Text.From(PAGE_SIZE)]
         )[totalCount],
-        pages = if totalCount = 0 then 0 else Number.RoundUp(totalCount / pageSize)
+        pages = if totalCount = 0 then 0 else Number.RoundUp(totalCount / PAGE_SIZE)
     in
         pages;
 
@@ -95,7 +95,7 @@ getPage = (url as text, authType as text, sections as list, page as number, path
             authType,
             path,
             [
-                #"page-size" = Text.From(pageSize),
+                #"page-size" = Text.From(PAGE_SIZE),
                 page = Text.From(page),
                 section = sections,
                 sort = sortKey
@@ -384,9 +384,11 @@ computers = (url as text, authType as text, totalPagesCount as number) as table 
                     expandUserAndLocation = Table.ExpandRecordColumn(expandPurchasing, "userAndLocation", ComputerMappings[UserAndLocation][api], ComputerMappings[UserAndLocation][mapped]),
                     expandHardware = Table.ExpandRecordColumn(expandUserAndLocation, "hardware", ComputerMappings[Hardware][api], ComputerMappings[Hardware][mapped]),
                     expandSecurity = Table.ExpandRecordColumn(expandHardware, "security", ComputerMappings[Security][api], ComputerMappings[Security][mapped]),
-                    expandOperatingSystem = Table.ExpandRecordColumn(expandSecurity, "operatingSystem", ComputerMappings[OperatingSystem][api], ComputerMappings[OperatingSystem][mapped])
+                    expandOperatingSystem = Table.ExpandRecordColumn(expandSecurity, "operatingSystem", ComputerMappings[OperatingSystem][api], ComputerMappings[OperatingSystem][mapped]),
+
+                    expandOperatingSystemWithEpoch = copyUtcColumnsToEpoch(expandOperatingSystem, ComputerMappings[UtcColumnNames])
                 in
-                    expandOperatingSystem
+                    expandOperatingSystemWithEpoch
     in
         result;
 
@@ -452,11 +454,10 @@ mobileDevices = (url as text, authType as text, totalPagesCount as number) as ta
                 in
                     expandNetwork,
 
+        addEpochColumns = copyUtcColumnsToEpoch(result, MobileDeviceMappings[UtcColumnNames]),
         // duplicate the name column as device_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(result, "device_name", each [name], type text),
-        compatibleSerialNumber = Table.AddColumn(
-            compatibleDisplayName, "serial_number", each [mobileDeviceDetails.serial_number], type text
-        )
+        compatibleDisplayName = Table.AddColumn(addEpochColumns, "device_name", each [name], type text),
+        compatibleSerialNumber = Table.AddColumn(compatibleDisplayName, "serial_number", each [mobileDeviceDetails.serial_number], type text)
     in
         result;
 
@@ -585,7 +586,6 @@ mobileDeviceExtensionAtttributes = (url as text, authType as text, totalPagesCou
             }
         ),
 
-        // TODO, empty table won't have correct columns here since things like `extensionAttributes` are expanded later. verify other tables, as well.
         emptyTable = #table(
             finalColumnNames,
             {}
@@ -647,6 +647,33 @@ normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields
         result = Table.RemoveColumns(filteredEAs, {columnName}, MissingField.Ignore)
     in
         result;
+
+dateString8600ToEpochMillis = (dateString as text) as number =>
+    let
+        dateObject = DateTime.FromText(dateString),
+        epochMillis = Duration.TotalSeconds(Duration.From(dateObject - #datetime(1970, 1, 1, 0, 0, 0))) * 1000
+    in
+        epochMillis;
+
+copyUtcColumnsToEpoch = (t as table, utcColumnNames as list) as table =>
+    let
+        // Generate new column names by replacing "_utc" with "_epoch"
+        epochColumnNames = List.Transform(utcColumnNames, each Text.Replace(_, "_utc", "_epoch")),
+        
+        // Convert each UTC column to epoch milliseconds and add as a new column
+        addEpochColumns = List.Accumulate(
+            List.Zip({utcColumnNames, epochColumnNames}),
+            t,
+            (state, current) =>
+                let
+                    utcColumnName = current{0},
+                    epochColumnName = current{1},
+                    addColumn = Table.AddColumn(state, epochColumnName, each try dateString8600ToEpochMillis(Record.Field(_, utcColumnName)) otherwise 0, type number)
+                in
+                    addColumn
+        )
+    in
+        addEpochColumns;
 
 // Data Source Kind description
 JamfPro = [

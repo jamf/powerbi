@@ -126,12 +126,33 @@
     LostModeLocation =  [api = ApiFields(LostModeLocationFields),   mapped = TableFields(LostModeLocationFields)],
 
     /**
+    * These date/time fields are both mapped directly and converted to an `_epoch` column
+    * format for compatibility with the legacy model. See the `copyUtcColumnsToEpoch`
+    * function for detail.
+    */
+    UtcColumnNames = {
+        "mobileDeviceDetails.last_inventory_update_utc",
+        "mobileDeviceDetails.last_enrollment_utc",
+        "mobileDeviceDetails.last_backup_time_utc",
+        "mobileDeviceDetails.last_cloud_backup_date_utc",
+        "mobileDeviceDetails.initial_entry_date_utc",
+        "mobileDeviceDetails.lease_expires_utc",
+        "mobileDeviceDetails.po_date_utc",
+        "mobileDeviceDetails.warranty_expires_utc",
+        "mobileDeviceDetails.lost_mode_enable_issued_utc",
+        "mobileDeviceDetails.lost_location_utc"
+    },
+
+    /*
+    */
+
+    /**
     * Fields that are not mapped to the legacy model, included here for reference.
     * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
     * these fields will be removed. 
     *
-    * Some of the fields (like `_date` and `_date_epoch` variants) are already mapped
-    * to the legacy model using the `_utc` variants.
+    * Some generic date/time fields like `mobileDeviceDetails.last_inventory_update`
+    * have been omitted in favor of their `_utc` and `_epoch` variants.
     *
     * The mobile device legacy model, in particular, had a number of duplicate fields
     * that have not been mapped. For example, `modelDisplay`, `mobileDeviceDetails.modelDisplay`,
@@ -147,28 +168,14 @@
         "model_display",
         "username",
         "mobileDeviceDetails.last_inventory_update",
-        "mobileDeviceDetails.last_inventory_update_epoch",
         "mobileDeviceDetails.capacity",
         "mobileDeviceDetails.available",
-        "mobileDeviceDetails.initial_entry_date_epoch",
-        "mobileDeviceDetails.initial_entry_date_utc",
         "mobileDeviceDetails.modelDisplay",
         "mobileDeviceDetails.model_display",
-        "mobileDeviceDetails.last_enrollment_epoch",
-        "mobileDeviceDetails.last_cloud_backup_date_epoch",
         "mobileDeviceDetails.location_services_enabled",
-        "mobileDeviceDetails.last_backup_time_epoch",
         "mobileDeviceDetails.realname",
-        "mobileDeviceDetails.po_date_epoch",
-        "mobileDeviceDetails.po_date_utc",
-        "mobileDeviceDetails.warranty_expires_epoch",
-        "mobileDeviceDetails.warranty_expires_utc",
-        "mobileDeviceDetails.lease_expires_epoch",
-        "mobileDeviceDetails.lease_expires_utc",
         "mobileDeviceDetails.attachments",
         "mobileDeviceDetails.lost_mode_enforced",
-        "mobileDeviceDetails.lost_mode_enable_issued_epoch",
-        "mobileDeviceDetails.lost_location_epoch",
         "mobileDeviceDetails.lost_location_latitude",
         "mobileDeviceDetails.lost_location_longitude"
     }
