@@ -42,23 +42,10 @@ shared JamfPro.JamfNavTable = (url as text, optional authType as text) as table 
             {
                 {"Computers", computers(url, authType, computerPages), "Table", "Table", true},
                 {"Computer Device Groups", computerGroups(url, authType), "Table", "Table", true},
-                {
-                    "Computers - Applications",
-                    computerApplications(url, authType, computerPages),
-                    "Table",
-                    "Table",
-                    true
-                },
+                {"Computers - Applications", computerApplications(url, authType, computerPages), "Table", "Table", true},
                 {"Computers - Extension attributes", computerExtensionAttributes(url, authType, computerPages), "Table", "Table", true},
-                {"Mobile Devices", mobileDevices(url, authType, mobileDevicesPages),
-                "Table", "Table", true},
-                {
-                    "Mobile - Applications",
-                    mobileDeviceApplications(url, authType, mobileDevicesPages),
-                    "Table",
-                    "Table",
-                    true
-                },
+                {"Mobile Devices", mobileDevices(url, authType, mobileDevicesPages), "Table", "Table", true},
+                {"Mobile - Applications", mobileDeviceApplications(url, authType, mobileDevicesPages), "Table", "Table", true},
                 {"Mobile Device Groups", mobileDeviceGroups(url, authType), "Table", "Table", true},
                 {"Mobile Devices - ExtensionAttributes", mobileDeviceExtensionAtttributes(url, authType, mobileDevicesPages), "Table", "Table", true}
             }
