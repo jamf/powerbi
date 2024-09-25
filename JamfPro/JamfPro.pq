@@ -88,10 +88,10 @@ removeTrailingSlash = (url as text) as text =>
 
 getTotalNumberOfPages = (url as text, authType as text, relativePath as text) as number =>
     let
-        devices_count = UAPIResource(
+        totalCount = UAPIResource(
             url, authType, "api/" & relativePath, [#"page-size" = Text.From(pageSize)]
         )[totalCount],
-        pages = if devices_count = 0 then 0 else Number.RoundUp(devices_count / pageSize)
+        pages = if totalCount = 0 then 0 else Number.RoundUp(totalCount / pageSize)
     in
         pages;
 
@@ -365,7 +365,7 @@ computers = (url as text, authType as text, totalPagesCount as number) as table 
             List.Combine(
                 {
                     tableFieldsTopLevel,
-                    ComputerMappings[TableGeneral]
+                    ComputerMappings[General][mapped]
                 }
             ),
             {}
@@ -386,37 +386,18 @@ computers = (url as text, authType as text, totalPagesCount as number) as table 
                     rowPerDevice = List.Combine(listOfPages),
                     selectedColumns = Table.FromRecords(
                         rowPerDevice,
-                        {"id", "udid", "general", "diskEncryption", "purchasing", "userAndLocation", "hardware", "security", "operatingSystem"},
+                        {"id", "udid", "general", "purchasing", "userAndLocation", "hardware", "security", "operatingSystem"},
                         MissingField.UseNull
                     ),
                     renameUdid = Table.RenameColumns(selectedColumns, {{"udid", "computerDetails.udid"}}),
-                    expandGeneral = Table.ExpandRecordColumn(
-                        renameUdid, "general", ComputerMappings[ApiGeneral], ComputerMappings[TableGeneral]
-                    ),
-                    expandRemoteManagement = Table.ExpandRecordColumn(
-                        expandGeneral, "remoteManagement", ComputerMappings[ApiRemoteManagement], ComputerMappings[TableRemoteManagement]
-                    ),
-                    expandMdmCapable = Table.ExpandRecordColumn(
-                        expandRemoteManagement, "mdmCapable", ComputerMappings[ApiMdmCapable], ComputerMappings[TableMdmCapable]
-                    ),
-                    expandDiskEncryption = Table.ExpandRecordColumn(
-                        expandMdmCapable, "diskEncryption", ComputerMappings[ApiDiskEncryption], ComputerMappings[TableDiskEncryption]
-                    ),
-                    expandPurchasing = Table.ExpandRecordColumn(
-                        expandDiskEncryption, "purchasing", ComputerMappings[ApiPurchasing], ComputerMappings[TablePurchasing]
-                    ),
-                    expandUserAndLocation = Table.ExpandRecordColumn(
-                        expandPurchasing, "userAndLocation", ComputerMappings[ApiUserAndLocation], ComputerMappings[TableUserAndLocation]
-                    ),
-                    expandHardware = Table.ExpandRecordColumn(
-                        expandUserAndLocation, "hardware", ComputerMappings[ApiHardware], ComputerMappings[TableHardware]
-                    ),
-                    expandSecurity = Table.ExpandRecordColumn(
-                        expandHardware, "security", ComputerMappings[ApiSecurity], ComputerMappings[TableSecurity]
-                    ),
-                    expandOperatingSystem = Table.ExpandRecordColumn(
-                        expandSecurity, "operatingSystem", ComputerMappings[ApiOperatingSystem], ComputerMappings[TableOperatingSystem]
-                    )
+                    expandGeneral = Table.ExpandRecordColumn(renameUdid, "general", ComputerMappings[General][api], ComputerMappings[General][mapped]),
+                    expandRemoteManagement = Table.ExpandRecordColumn(expandGeneral, "remoteManagement", ComputerMappings[RemoteManagement][api], ComputerMappings[RemoteManagement][mapped]),
+                    expandMdmCapable = Table.ExpandRecordColumn(expandRemoteManagement, "mdmCapable", ComputerMappings[MdmCapable][api], ComputerMappings[MdmCapable][mapped]),
+                    expandPurchasing = Table.ExpandRecordColumn(expandMdmCapable, "purchasing", ComputerMappings[Purchasing][api], ComputerMappings[Purchasing][mapped]),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandPurchasing, "userAndLocation", ComputerMappings[UserAndLocation][api], ComputerMappings[UserAndLocation][mapped]),
+                    expandHardware = Table.ExpandRecordColumn(expandUserAndLocation, "hardware", ComputerMappings[Hardware][api], ComputerMappings[Hardware][mapped]),
+                    expandSecurity = Table.ExpandRecordColumn(expandHardware, "security", ComputerMappings[Security][api], ComputerMappings[Security][mapped]),
+                    expandOperatingSystem = Table.ExpandRecordColumn(expandSecurity, "operatingSystem", ComputerMappings[OperatingSystem][api], ComputerMappings[OperatingSystem][mapped])
                 in
                     expandOperatingSystem
     in
@@ -425,13 +406,13 @@ computers = (url as text, authType as text, totalPagesCount as number) as table 
 // Mobile device lookup and mapping function.
 //
 // Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
-// - "API" fields are the fields returned by the Jamf Pro API and "Table" are the fields that will
+// - "api" fields are the fields returned by the Jamf Pro API and "mapped" are the fields that will
 //   be displayed in the Power BI table. The remapping was necessary to limit the number of
 //   changes to the legacy data model, in an effort to preserve existing data sets and
-//   visualizations where possible. See FieldMappings.pqm for the full list of mappings.
-// - Commented out fields in the API field lists do not have an analogue in the legacy data model
+//   visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
+// - Some fields from the Jamf Pro API do not have an analogue in the legacy data model
 //   and are excluded at this time. They may be added in the future.
-// - Fields in the "Unmapped" list will be removed from legacy data models. Most of these are
+// - Fields in the "unmapped" list will be removed from legacy data models. Many of these are
 //   duplicative (e.g., model/modelDisplay/model_display).
 // - Dates are mapped to the _utc variant of the field name to match the legacy data model.
 mobileDevices = (url as text, authType as text, totalPagesCount as number) as table =>
@@ -443,13 +424,13 @@ mobileDevices = (url as text, authType as text, totalPagesCount as number) as ta
             List.Combine(
                 {
                     tableFieldsTopLevel,
-                    MobileDeviceMappings[TableGeneral],
-                    MobileDeviceMappings[TableHardware],
-                    MobileDeviceMappings[TableUserAndLocation],
-                    MobileDeviceMappings[TableSecurity],
-                    MobileDeviceMappings[TableLostModeLocation],
-                    MobileDeviceMappings[TablePurchasing],
-                    MobileDeviceMappings[TableNetwork]
+                    MobileDeviceMappings[General][mapped],
+                    MobileDeviceMappings[Hardware][mapped],
+                    MobileDeviceMappings[UserAndLocation][mapped],
+                    MobileDeviceMappings[Security][mapped],
+                    MobileDeviceMappings[LostModeLocation][mapped],
+                    MobileDeviceMappings[Purchasing][mapped],
+                    MobileDeviceMappings[Network][mapped]
                 }
             ),
             {}
@@ -473,32 +454,17 @@ mobileDevices = (url as text, authType as text, totalPagesCount as number) as ta
                         {"mobileDeviceId", "deviceType", "general", "hardware", "userAndLocation", "security", "purchasing", "network"},
                         MissingField.UseNull
                     ),
-                    renameTopLevelFields = Table.RenameColumns(
-                        selectedColumns, List.Zip({apiFieldsTopLevel, tableFieldsTopLevel})
-                    ),
-                    expandGeneral = Table.ExpandRecordColumn(
-                        renameTopLevelFields, "general", MobileDeviceMappings[ApiGeneral], MobileDeviceMappings[TableGeneral]
-                    ),
-                    expandHardware = Table.ExpandRecordColumn(
-                        expandGeneral, "hardware", MobileDeviceMappings[ApiHardware], MobileDeviceMappings[TableHardware]
-                    ),
-                    expandUserAndLocation = Table.ExpandRecordColumn(
-                        expandHardware, "userAndLocation", MobileDeviceMappings[ApiUserAndLocation], MobileDeviceMappings[TableUserAndLocation]
-                    ),
-                    expandSecurity = Table.ExpandRecordColumn(
-                        expandUserAndLocation, "security", MobileDeviceMappings[ApiSecurity], MobileDeviceMappings[TableSecurity]
-                    ),
-                    expandLostModeLocation = Table.ExpandRecordColumn(
-                        expandSecurity, "lostModeLocation", MobileDeviceMappings[ApiLostModeLocation], MobileDeviceMappings[TableLostModeLocation]
-                    ),
-                    expandPurchasing = Table.ExpandRecordColumn(
-                        expandLostModeLocation, "purchasing", MobileDeviceMappings[ApiPurchasing], MobileDeviceMappings[TablePurchasing]
-                    ),
-                    expandNetwork = Table.ExpandRecordColumn(
-                        expandPurchasing, "network", MobileDeviceMappings[ApiNetwork], MobileDeviceMappings[TableNetwork]
-                    )
+                    renameTopLevelFields = Table.RenameColumns(selectedColumns, List.Zip({apiFieldsTopLevel, tableFieldsTopLevel})),
+                    expandGeneral = Table.ExpandRecordColumn(renameTopLevelFields, "general", MobileDeviceMappings[General][api], MobileDeviceMappings[General][mapped]),
+                    expandHardware = Table.ExpandRecordColumn(expandGeneral, "hardware", MobileDeviceMappings[Hardware][api], MobileDeviceMappings[Hardware][mapped]),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandHardware, "userAndLocation", MobileDeviceMappings[UserAndLocation][api], MobileDeviceMappings[UserAndLocation][mapped]),
+                    expandSecurity = Table.ExpandRecordColumn(expandUserAndLocation, "security", MobileDeviceMappings[Security][api], MobileDeviceMappings[Security][mapped]),
+                    expandLostModeLocation = Table.ExpandRecordColumn(expandSecurity, "lostModeLocation", MobileDeviceMappings[LostModeLocation][api], MobileDeviceMappings[LostModeLocation][mapped]),
+                    expandPurchasing = Table.ExpandRecordColumn(expandLostModeLocation, "purchasing", MobileDeviceMappings[Purchasing][api], MobileDeviceMappings[Purchasing][mapped]),
+                    expandNetwork = Table.ExpandRecordColumn(expandPurchasing, "network", MobileDeviceMappings[Network][api], MobileDeviceMappings[Network][mapped])
                 in
                     expandNetwork,
+
         // duplicate the name column as device_name. we need the same value in both columns for strict backward compatibility
         compatibleDisplayName = Table.AddColumn(result, "device_name", each [name], type text),
         compatibleSerialNumber = Table.AddColumn(
