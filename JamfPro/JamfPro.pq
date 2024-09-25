@@ -675,9 +675,18 @@ copyUtcColumnsToEpoch = (t as table, utcColumnNames as list) as table =>
     in
         addEpochColumns;
 
-// Data Source Kind description
+// Data Source definition
 JamfPro = [
-    TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
+    TestConnection = (dataSourcePath) => 
+        try // try to parse as the current format with jamfUrl and authType
+            let
+                json = Json.Document(dataSourcePath),
+                jamfUrl = json[jamfUrl],
+                authType = if Record.HasFields(json, "authType") then json[authType] else "UsernamePassword"
+            in
+                {"JamfPro.JamfNavTable", jamfUrl, authType}
+        otherwise // fallback to the old format from 1.0.0-beta, using the dataSourcePath as the URL
+            {"JamfPro.JamfNavTable", dataSourcePath},
     Authentication = [
         UsernamePassword = [
             UsernameLabel = "Username (or client ID)",
