@@ -1,0 +1,162 @@
+[
+    ApiFields = (mappings as list)  as list => List.Transform(mappings, each _[api]),
+    TableFields = (mappings as list ) as list => List.Transform(mappings, each _[mapped]),
+
+    GeneralFields = {
+        [api = "name",                     mapped = "name"],
+        [api = "lastIpAddress",            mapped = "computerDetails.ip_address"],
+        [api = "lastReportedIp",           mapped = "computerDetails.last_reported_ip"],
+        [api = "jamfBinaryVersion",        mapped = "computerDetails.jamf_version"],
+        [api = "platform",                 mapped = "computerDetails.platform"],
+        [api = "barcode1",                 mapped = "computerDetails.barcode_1"],
+        [api = "barcode2",                 mapped = "computerDetails.barcode_2"],
+        [api = "assetTag",                 mapped = "computerDetails.asset_tag"],
+        [api = "remoteManagement",         mapped = "remoteManagement"],
+        [api = "mdmCapable",               mapped = "mdmCapable"],
+        [api = "reportDate",               mapped = "computerDetails.report_date_utc"],
+        [api = "lastContactTime",          mapped = "computerDetails.last_contact_time_utc"],
+        [api = "lastCloudBackupDate",      mapped = "computerDetails.last_cloud_backup_date_utc"],
+        [api = "lastEnrolledDate",         mapped = "computerDetails.last_enrolled_date_utc"],
+        [api = "initialEntryDate",         mapped = "computerDetails.initial_entry_date_utc"],
+        [api = "distributionPoint",        mapped = "computerDetails.distribution_point"],
+        [api = "site",                     mapped = "computerDetails.site"],
+        [api = "itunesStoreAccountActive", mapped = "computerDetails.itunes_store_account_is_active"]
+        },
+
+    RemoteManagementFields = {
+        [api = "managed",                mapped = "computerDetails.remote_management.managed"],
+        [api = "managementUsername",     mapped = "computerDetails.remote_management.management_username"]
+    },
+
+   MdmCapableFields = {
+        [api = "capable",                mapped = "computerDetails.mdm_capable"],
+        [api = "capableUsers",           mapped = "computerDetails.mdm_capable_users.mdm_capable_user"]
+   },
+
+   PurchasingFields = {
+        [api = "purchased",              mapped = "computerDetails.is_purchased"],
+        [api = "leased",                 mapped = "computerDetails.is_leased"],
+        [api = "poNumber",               mapped = "computerDetails.po_number"],
+        [api = "lifeExpectancy",         mapped = "computerDetails.life_expectancy"],
+        [api = "purchasePrice",          mapped = "computerDetails.purchase_price"],
+        [api = "purchasingAccount",      mapped = "computerDetails.purchasing_account"],
+        [api = "purchasingContact",      mapped = "computerDetails.purchasing_contact"],
+        [api = "appleCareId",            mapped = "computerDetails.applecare_id"],
+        [api = "vendor",                 mapped = "computerDetails.vendor"],
+        [api = "leaseDate",              mapped = "computerDetails.lease_expires_utc"],
+        [api = "poDate",                 mapped = "computerDetails.po_date_utc"],
+        [api = "warrantyDate",           mapped = "computerDetails.warranty_expires_utc"]
+    },
+
+    UserAndLocationFields = {
+        [api = "username",               mapped = "computerDetails.username"],
+        [api = "realname",               mapped = "computerDetails.realname"],
+        [api = "email",                  mapped = "computerDetails.email_address"],
+        [api = "position",               mapped = "computerDetails.position"],
+        [api = "phone",                  mapped = "computerDetails.phone"],
+        [api = "departmentId",           mapped = "computerDetails.department"],
+        [api = "buildingId",             mapped = "computerDetails.building"],
+        [api = "room",                   mapped = "computerDetails.room"]
+    },
+
+    HardwareFields = {
+        [api = "make",                   mapped = "computerDetails.make"],
+        [api = "model",                  mapped = "computerDetails.model"],
+        [api = "modelIdentifier",        mapped = "computerDetails.model_identifier"],
+        [api = "serialNumber",           mapped = "computerDetails.serial_number"],
+        [api = "processorSpeedMhz",      mapped = "computerDetails.processor_speed_mhz"],
+        [api = "processorCount",         mapped = "computerDetails.number_processors"],
+        [api = "coreCount",              mapped = "computerDetails.number_cores"],
+        [api = "processorType",          mapped = "computerDetails.processor_type"],
+        [api = "processorArchitecture",  mapped = "computerDetails.processor_architecture"],
+        [api = "busSpeedMhz",            mapped = "computerDetails.bus_speed_mhz"],
+        [api = "cacheSizeKilobytes",     mapped = "computerDetails.cache_size_kb"],
+        [api = "macAddress",             mapped = "computerDetails.mac_address"],
+        [api = "altMacAddress",          mapped = "computerDetails.alt_mac_address"],
+        [api = "totalRamMegabytes",      mapped = "computerDetails.total_ram_mb"],
+        [api = "openRamSlots",           mapped = "computerDetails.available_ram_slots"],
+        [api = "batteryCapacityPercent", mapped = "computerDetails.battery_capacity"],
+        [api = "smcVersion",             mapped = "computerDetails.smc_version"],
+        [api = "nicSpeed",               mapped = "computerDetails.nic_speed"],
+        [api = "opticalDrive",           mapped = "computerDetails.optical_drive"],
+        [api = "bootRom",                mapped = "computerDetails.boot_rom"],
+        [api = "bleCapable",             mapped = "computerDetails.ble_capable"]
+    },
+
+    SecurityFields = {
+        [api = "sipStatus",              mapped = "computerDetails.sip_status"],
+        [api = "gatekeeperStatus",       mapped = "computerDetails.gatekeeper_status"],
+        [api = "xprotectVersion",        mapped = "computerDetails.xprotect_version"]
+    },
+
+    OperatingSystemFields = {
+        [api = "name",                   mapped = "computerDetails.os_name"],
+        [api = "version",                mapped = "computerDetails.os_version"],
+        [api = "build",                  mapped = "computerDetails.os_build"],
+        [api = "activeDirectoryStatus",  mapped = "computerDetails.active_directory_status"]
+    },
+
+    General =           [api = ApiFields(GeneralFields),            mapped = TableFields(GeneralFields)],
+    RemoteManagement =  [api = ApiFields(RemoteManagementFields),   mapped = TableFields(RemoteManagementFields)],
+    MdmCapable =        [api = ApiFields(MdmCapableFields),         mapped = TableFields(MdmCapableFields)],
+    Purchasing =        [api = ApiFields(PurchasingFields),         mapped = TableFields(PurchasingFields)],
+    UserAndLocation =   [api = ApiFields(UserAndLocationFields),    mapped = TableFields(UserAndLocationFields)],
+    Hardware =          [api = ApiFields(HardwareFields),           mapped = TableFields(HardwareFields)],
+    Security =          [api = ApiFields(SecurityFields),           mapped = TableFields(SecurityFields)],
+    OperatingSystem =   [api = ApiFields(OperatingSystemFields),    mapped = TableFields(OperatingSystemFields)],
+
+    /**
+    * These date/time fields are both mapped directly and converted to an `_epoch` column
+    * format for compatibility with the legacy model. See the `copyUtcColumnsToEpoch`
+    * function for detail.
+    */
+    UtcColumnNames = {
+        "computerDetails.report_date_utc",
+        "computerDetails.last_contact_time_utc",
+        "computerDetails.last_cloud_backup_date_utc",
+        "computerDetails.last_enrolled_date_utc",
+        "computerDetails.initial_entry_date_utc",
+        "computerDetails.lease_expires_utc",
+        "computerDetails.po_date_utc",
+        "computerDetails.warranty_expires_utc"
+    },
+
+    /**
+    * Fields that are not mapped to the legacy model, included here for reference.
+    * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
+    * these fields will be removed. 
+    *
+    * Some generic date/time fields like `computerDetails.report_date` have been
+    * omitted in favor of their `_utc` and `_epoch` variants.
+    *
+    * Others fields may not have had a direct analog in the Jamf Pro API.
+    */
+    UnmappedFields = {
+        "computerDetails.country_name",
+        "computerDetails.remote_management.management_password_sha256",
+        "computerDetails.management_status",
+        "computerDetails.report_date",
+        "computerDetails.last_contact_time",
+        "computerDetails.initial_entry_date",
+        "computerDetails.sus",
+        "computerDetails.netboot_server",
+        "computerDetails.real_name",
+        "computerDetails.phone_number",
+        "computerDetails.po_date",
+        "computerDetails.warranty_expires",
+        "computerDetails.lease_expires",
+        "computerDetails.os_applecare_id",
+        "computerDetails.os_maintenance_expires",
+        "computerDetails.attachments",
+        "computerDetails.master_password_set",
+        "computerDetails.service_pack",
+        "computerDetails.processor_speed",
+        "computerDetails.total_ram",
+        "computerDetails.bus_speed",
+        "computerDetails.cache_size",
+        "computerDetails.institutional_recovery_key",
+        "computerDetails.disk_encryption_configuration",
+        "computerDetails.filevault2_users",
+        "computerDetails.mapped_printers"
+    }
+]

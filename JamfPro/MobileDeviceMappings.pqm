@@ -1,0 +1,182 @@
+[
+    ApiFields = (mappings as list)  as list => List.Transform(mappings, each _[api]),
+    TableFields = (mappings as list ) as list => List.Transform(mappings, each _[mapped]),
+
+    GeneralFields = {
+        [api = "udid",                        mapped = "mobileDeviceDetails.udid"],
+        [api = "displayName",                 mapped = "name"],
+        [api = "assetTag",                    mapped = "mobileDeviceDetails.asset_tag"],
+
+        // TODO: siteId is mapped to the site's ID, but the legacy connector maps it to a record with the site's ID and name
+        [api = "siteId",                      mapped = "mobileDeviceDetails.site"],
+        [api = "lastInventoryUpdateDate",     mapped = "mobileDeviceDetails.last_inventory_update_utc"],
+        [api = "osVersion",                   mapped = "mobileDeviceDetails.os_version"],
+        [api = "osBuild",                     mapped = "mobileDeviceDetails.os_build"],
+        [api = "ipAddress",                   mapped = "mobileDeviceDetails.ip_address"],
+        [api = "managed",                     mapped = "mobileDeviceDetails.managed"],
+        [api = "supervised",                  mapped = "mobileDeviceDetails.supervised"],
+        [api = "deviceOwnershipType",         mapped = "mobileDeviceDetails.device_ownership_level"],
+        [api = "lastEnrolledDate",            mapped = "mobileDeviceDetails.last_enrollment_utc"],
+        [api = "sharedIpad",                  mapped = "mobileDeviceDetails.shared"],
+        [api = "lastBackupDate",              mapped = "mobileDeviceDetails.last_backup_time_utc"],
+        [api = "deviceLocatorServiceEnabled", mapped = "mobileDeviceDetails.device_locator_service_enabled"],
+        [api = "doNotDisturbEnabled",         mapped = "mobileDeviceDetails.do_not_disturb_enabled"],
+        [api = "cloudBackupEnabled",          mapped = "mobileDeviceDetails.cloud_backup_enabled"],
+        [api = "lastCloudBackupDate",         mapped = "mobileDeviceDetails.last_cloud_backup_date_utc"],
+        [api = "itunesStoreAccountActive",    mapped = "mobileDeviceDetails.itunes_store_account_is_active"],
+        [api = "exchangeDeviceId",            mapped = "mobileDeviceDetails.exchange_activesync_device_identifier"],
+        [api = "tethered",                    mapped = "mobileDeviceDetails.tethered"]
+    },
+
+    HardwareFields = {
+        [api = "capacityMb",                  mapped = "mobileDeviceDetails.capacity_mb"],
+        [api = "availableSpaceMb",            mapped = "mobileDeviceDetails.available_mb"],
+        [api = "usedSpacePercentage",         mapped = "mobileDeviceDetails.percentage_used"],
+        [api = "batteryLevel",                mapped = "mobileDeviceDetails.battery_level"],
+        [api = "serialNumber",                mapped = "mobileDeviceDetails.serial_number"],
+        [api = "wifiMacAddress",              mapped = "mobileDeviceDetails.wifi_mac_address"],
+        [api = "bluetoothMacAddress",         mapped = "mobileDeviceDetails.bluetooth_mac_address"],
+        [api = "modemFirmwareVersion",        mapped = "mobileDeviceDetails.modem_firmware"],
+        [api = "model",                       mapped = "mobileDeviceDetails.model"],
+        [api = "modelIdentifier",             mapped = "mobileDeviceDetails.model_identifier"],
+        [api = "modelNumber",                 mapped = "mobileDeviceDetails.model_number"],
+        [api = "bluetoothLowEnergyCapable",   mapped = "mobileDeviceDetails.ble_capable"]
+    },
+
+    UserAndLocationFields = {
+        [api = "username",                    mapped = "mobileDeviceDetails.username"],
+        [api = "realName",                    mapped = "mobileDeviceDetails.real_name"],
+        [api = "emailAddress",                mapped = "mobileDeviceDetails.email_address"],
+        [api = "position",                    mapped = "mobileDeviceDetails.position"],
+        [api = "phoneNumber",                 mapped = "mobileDeviceDetails.phone_number"],
+        [api = "room",                        mapped = "mobileDeviceDetails.room"],
+        [api = "building",                    mapped = "mobileDeviceDetails.building"],
+        [api = "department",                  mapped = "mobileDeviceDetails.department"]
+    },
+
+
+    NetworkFields = {
+        [api = "cellularTechnology",          mapped = "mobileDeviceDetails.cellular_technology"],
+        [api = "voiceRoamingEnabled",         mapped = "mobileDeviceDetails.voice_roaming_enabled"],
+        [api = "imei",                        mapped = "mobileDeviceDetails.imei"],
+        [api = "iccid",                       mapped = "mobileDeviceDetails.iccid"],
+        [api = "meid",                        mapped = "mobileDeviceDetails.meid"],
+        [api = "carrierSettingsVersion",      mapped = "mobileDeviceDetails.carrier_settings_version"],
+        [api = "currentCarrierNetwork",       mapped = "mobileDeviceDetails.current_carrier_network"],
+        [api = "currentMobileCountryCode",    mapped = "mobileDeviceDetails.current_mobile_country_code"],
+        [api = "currentMobileNetworkCode",    mapped = "mobileDeviceDetails.current_mobile_network_code"],
+        [api = "homeCarrierNetwork",          mapped = "mobileDeviceDetails.home_carrier_network"],
+        [api = "homeMobileCountryCode",       mapped = "mobileDeviceDetails.home_mobile_country_code"],
+        [api = "homeMobileNetworkCode",       mapped = "mobileDeviceDetails.home_mobile_network_code"],
+        [api = "dataRoamingEnabled",          mapped = "mobileDeviceDetails.data_roaming_enabled"],
+        [api = "roaming",                     mapped = "mobileDeviceDetails.roaming"],
+        [api = "phoneNumber",                 mapped = "mobileDeviceDetails.phone"]
+    },
+
+    PurchasingFields = {
+        [api = "purchased",                   mapped = "mobileDeviceDetails.is_purchased"],
+        [api = "leased",                      mapped = "mobileDeviceDetails.is_leased"],
+        [api = "poNumber",                    mapped = "mobileDeviceDetails.po_number"],
+        [api = "vendor",                      mapped = "mobileDeviceDetails.vendor"],
+        [api = "appleCareId",                 mapped = "mobileDeviceDetails.applecare_id"],
+        [api = "purchasePrice",               mapped = "mobileDeviceDetails.purchase_price"],
+        [api = "purchasingAccount",           mapped = "mobileDeviceDetails.purchasing_account"],
+        [api = "poDate",                      mapped = "mobileDeviceDetails.po_date"],
+        [api = "warrantyExpiresDate",         mapped = "mobileDeviceDetails.warranty_expires"],
+        [api = "leaseExpiresDate",            mapped = "mobileDeviceDetails.lease_expires"],
+        [api = "lifeExpectancy",              mapped = "mobileDeviceDetails.life_expectancy"],
+        [api = "purchasingContact",           mapped = "mobileDeviceDetails.purchasing_contact"]
+    },
+
+    SecurityFields = {
+        [api = "dataProtected",                            mapped = "mobileDeviceDetails.data_protection"],
+        [api = "blockLevelEncryptionCapable",              mapped = "mobileDeviceDetails.block_level_encryption_capable"],
+        [api = "fileLevelEncryptionCapable",               mapped = "mobileDeviceDetails.file_level_encryption_capable"],
+        [api = "passcodePresent",                          mapped = "mobileDeviceDetails.passcode_present"],
+        [api = "passcodeCompliant",                        mapped = "mobileDeviceDetails.passcode_compliant"],
+        [api = "passcodeCompliantWithProfile",             mapped = "mobileDeviceDetails.passcode_compliant_with_profile"],
+        [api = "hardwareEncryption",                       mapped = "mobileDeviceDetails.hardware_encryption"],
+        [api = "activationLockEnabled",                    mapped = "mobileDeviceDetails.activation_lock_enabled"],
+        [api = "jailBreakDetected",                        mapped = "mobileDeviceDetails.jailbreak_detected"],
+        [api = "passcodeLockGracePeriodEnforcedSeconds",   mapped = "mobileDeviceDetails.passcode_lock_grace_period_enforced"],
+        [api = "lostModeEnabled",                          mapped = "mobileDeviceDetails.lost_mode_enabled"],
+        [api = "lostModeMessage",                          mapped = "mobileDeviceDetails.lost_mode_message"],
+        [api = "lostModePhoneNumber",                      mapped = "mobileDeviceDetails.lost_mode_phone"],
+        [api = "lostModeFootnote",                         mapped = "mobileDeviceDetails.lost_mode_footnote"],
+        [api = "lostModeLocation",                         mapped = "lostModeLocation"],
+        [api = "lostModeEnabledDate",                      mapped = "mobileDeviceDetails.lost_mode_enable_issued_utc"]
+    },
+
+    LostModeLocationFields = {
+        [api = "lastLocationUpdate",                       mapped = "mobileDeviceDetails.lost_location_utc"],
+        [api = "lostModeLocationHorizontalAccuracyMeters", mapped = "mobileDeviceDetails.lost_location_horizontal_accuracy"],
+        [api = "lostModeLocationVerticalAccuracyMeters",   mapped = "mobileDeviceDetails.lost_location_vertical_accuracy"],
+        [api = "lostModeLocationAltitudeMeters",           mapped = "mobileDeviceDetails.lost_location_altitude"],
+        [api = "lostModeLocationSpeedMetersPerSecond",     mapped = "mobileDeviceDetails.lost_location_speed"],
+        [api = "lostModeLocationCourseDegrees",            mapped = "mobileDeviceDetails.lost_location_course"],
+        [api = "lostModeLocationTimestamp",                mapped = "mobileDeviceDetails.lost_mode_location_timestamp"]
+    },
+
+    General =           [api = ApiFields(GeneralFields),            mapped = TableFields(GeneralFields)],
+    Hardware =          [api = ApiFields(HardwareFields),           mapped = TableFields(HardwareFields)],
+    UserAndLocation =   [api = ApiFields(UserAndLocationFields),    mapped = TableFields(UserAndLocationFields)],
+    Network =           [api = ApiFields(NetworkFields),            mapped = TableFields(NetworkFields)],
+    Purchasing =        [api = ApiFields(PurchasingFields),         mapped = TableFields(PurchasingFields)],
+    Security =          [api = ApiFields(SecurityFields),           mapped = TableFields(SecurityFields)],
+    LostModeLocation =  [api = ApiFields(LostModeLocationFields),   mapped = TableFields(LostModeLocationFields)],
+
+    /**
+    * These date/time fields are both mapped directly and converted to an `_epoch` column
+    * format for compatibility with the legacy model. See the `copyUtcColumnsToEpoch`
+    * function for detail.
+    */
+    UtcColumnNames = {
+        "mobileDeviceDetails.last_inventory_update_utc",
+        "mobileDeviceDetails.last_enrollment_utc",
+        "mobileDeviceDetails.last_backup_time_utc",
+        "mobileDeviceDetails.last_cloud_backup_date_utc",
+        "mobileDeviceDetails.initial_entry_date_utc",
+        "mobileDeviceDetails.lease_expires_utc",
+        "mobileDeviceDetails.po_date_utc",
+        "mobileDeviceDetails.warranty_expires_utc",
+        "mobileDeviceDetails.lost_mode_enable_issued_utc",
+        "mobileDeviceDetails.lost_location_utc"
+    },
+
+    /*
+    */
+
+    /**
+    * Fields that are not mapped to the legacy model, included here for reference.
+    * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
+    * these fields will be removed. 
+    *
+    * Some generic date/time fields like `mobileDeviceDetails.last_inventory_update`
+    * have been omitted in favor of their `_utc` and `_epoch` variants.
+    *
+    * The mobile device legacy model, in particular, had a number of duplicate fields
+    * that have not been mapped. For example, `modelDisplay`, `mobileDeviceDetails.modelDisplay`,
+    * and `mobileDeviceDetails.modelDisplay` have been excluded from the mapping, as they
+    * represent the same data as the `mobileDeviceDetails.model` field.
+    */
+    UnmappedFields = {
+        "phone_number",
+        "wifi_mac_address",
+        "model",
+        "model_identifier",
+        "modelDisplay",
+        "model_display",
+        "username",
+        "mobileDeviceDetails.last_inventory_update",
+        "mobileDeviceDetails.capacity",
+        "mobileDeviceDetails.available",
+        "mobileDeviceDetails.modelDisplay",
+        "mobileDeviceDetails.model_display",
+        "mobileDeviceDetails.location_services_enabled",
+        "mobileDeviceDetails.realname",
+        "mobileDeviceDetails.attachments",
+        "mobileDeviceDetails.lost_mode_enforced",
+        "mobileDeviceDetails.lost_location_latitude",
+        "mobileDeviceDetails.lost_location_longitude"
+    }
+]
