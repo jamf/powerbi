@@ -117,6 +117,28 @@
         [api = "lostModeLocationTimestamp",                mapped = "mobileDeviceDetails.lost_mode_location_timestamp"]
     },
 
+    AppsAndEAsFieldsToDuplicate = {
+        [original = "name",                                 duplicate = "device_name"],
+        [original = "name",                                 duplicate = "display_name"],
+        [original = "model",                                duplicate = "model_display"],
+        [original = "model",                                duplicate = "modelDisplay"]
+    },
+
+    FieldsToDuplicate = {
+        [original = "mobileDeviceDetails.managed",          duplicate = "managed"],
+        [original = "mobileDeviceDetails.udid",             duplicate = "udid"],
+        [original = "mobileDeviceDetails.serial_number",    duplicate = "serial_number"],
+        [original = "mobileDeviceDetails.wifi_mac_address", duplicate = "wifi_mac_address"],
+        [original = "name",                                 duplicate = "device_name"],
+        [original = "mobileDeviceDetails.model",            duplicate = "model"],
+        [original = "mobileDeviceDetails.model",            duplicate = "modelDisplay"],
+        [original = "mobileDeviceDetails.model",            duplicate = "model_display"],
+        [original = "mobileDeviceDetails.model_identifier", duplicate = "model_identifier"],
+        [original = "mobileDeviceDetails.supervised",       duplicate = "supervised"],
+        [original = "mobileDeviceDetails.username",         duplicate = "username"],
+        [original = "mobileDeviceDetails.phone_number",     duplicate = "phone_number"]
+    },
+
     General =           [api = ApiFields(GeneralFields),            mapped = TableFields(GeneralFields)],
     Hardware =          [api = ApiFields(HardwareFields),           mapped = TableFields(HardwareFields)],
     UserAndLocation =   [api = ApiFields(UserAndLocationFields),    mapped = TableFields(UserAndLocationFields)],
@@ -160,13 +182,7 @@
     * represent the same data as the `mobileDeviceDetails.model` field.
     */
     UnmappedFields = {
-        "phone_number",
-        "wifi_mac_address",
-        "model",
-        "model_identifier",
-        "modelDisplay",
-        "model_display",
-        "username",
+        "mobileDeviceDetails.initial_entry_date_utc",
         "mobileDeviceDetails.last_inventory_update",
         "mobileDeviceDetails.capacity",
         "mobileDeviceDetails.available",
@@ -175,6 +191,9 @@
         "mobileDeviceDetails.location_services_enabled",
         "mobileDeviceDetails.realname",
         "mobileDeviceDetails.attachments",
+        "mobileDeviceDetails.po_date_utc",
+        "mobileDeviceDetails.lease_expires_utc",
+        "mobileDeviceDetails.warranty_expires_utc",
         "mobileDeviceDetails.lost_mode_enforced",
         "mobileDeviceDetails.lost_location_latitude",
         "mobileDeviceDetails.lost_location_longitude"

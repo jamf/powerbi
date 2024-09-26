@@ -371,9 +371,12 @@ computers = (url as text, totalPagesCount as number) as table =>
                     expandSecurity = Table.ExpandRecordColumn(expandHardware, "security", ComputerMappings[Security][api], ComputerMappings[Security][mapped]),
                     expandOperatingSystem = Table.ExpandRecordColumn(expandSecurity, "operatingSystem", ComputerMappings[OperatingSystem][api], ComputerMappings[OperatingSystem][mapped]),
 
-                    expandOperatingSystemWithEpoch = copyUtcColumnsToEpoch(expandOperatingSystem, ComputerMappings[UtcColumnNames])
+                    // add any unmapped columns to the final table for backward compatibility
+                    withUnmappedColumns = addUnmappedColumns(expandOperatingSystem, ComputerMappings[UnmappedFields]),
+                    withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, ComputerMappings[UtcColumnNames])
+
                 in
-                    expandOperatingSystemWithEpoch
+                    withEpochColumns
     in
         result;
 
@@ -439,12 +442,11 @@ mobileDevices = (url as text, totalPagesCount as number) as table =>
                 in
                     expandNetwork,
 
-        addEpochColumns = copyUtcColumnsToEpoch(result, MobileDeviceMappings[UtcColumnNames]),
-        // duplicate the name column as device_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(addEpochColumns, "device_name", each [name], type text),
-        compatibleSerialNumber = Table.AddColumn(compatibleDisplayName, "serial_number", each [mobileDeviceDetails.serial_number], type text)
+        withUnmappedColumns = addUnmappedColumns(result, MobileDeviceMappings[UnmappedFields]),
+        withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, MobileDeviceMappings[UtcColumnNames]),
+        withDuplicateColumns = duplicateColumns(withEpochColumns, MobileDeviceMappings[FieldsToDuplicate])
     in
-        result;
+        withDuplicateColumns;
 
 mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
     let
@@ -501,13 +503,10 @@ mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
                     )
                 in
                     expandApps,
-        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(result, "display_name", each [name], type text),
-        // do the same for model, copying it to both modelDisplay and model_display
-        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
-        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
+        
+        withDuplicateColumns = duplicateColumns(result, MobileDeviceMappings[AppsAndEAsFieldsToDuplicate])
     in
-        compatibleModelDisplay;
+        withDuplicateColumns;
 
 computerExtensionAttributes = (url as text, totalPagesCount as number) as table =>
     let
@@ -611,15 +610,10 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
                 in
                     combinedEAs,
 
-        finalColumns = Table.SelectColumns(result, finalColumnNames),
-
-        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(finalColumns, "display_name", each [name], type text),
-        // do the same for model, copying it to both modelDisplay and model_display
-        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
-        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
+        finalUniqueColumns = Table.SelectColumns(result, finalColumnNames),
+        withDuplicateColumns = duplicateColumns(finalUniqueColumns, MobileDeviceMappings[AppsAndEAsFieldsToDuplicate])
     in
-        compatibleModelDisplay;
+        withDuplicateColumns;
 
 normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields as record) as table =>
     let
@@ -659,6 +653,34 @@ copyUtcColumnsToEpoch = (t as table, utcColumnNames as list) as table =>
         )
     in
         addEpochColumns;
+
+addUnmappedColumns = (t as table, unmappedFields as list) as table =>
+    let
+        result = List.Accumulate(
+            unmappedFields,
+            t,
+            (state, current) =>
+                try
+                    Table.AddColumn(state, current, each null, type any)
+                otherwise
+                    state
+        )
+    in
+        result;
+
+duplicateColumns = (t as table, fieldsToDuplicate as list) as table =>
+    let
+        result = List.Accumulate(
+            fieldsToDuplicate,
+            t,
+            (state, current) =>
+                let
+                    addColumn = Table.AddColumn(state, current[duplicate], each Record.Field(_, current[original]), type any)
+                in
+                    addColumn
+        )
+    in
+        result;
 
 // Data Source definition
 JamfPro = [
