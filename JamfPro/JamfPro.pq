@@ -373,25 +373,20 @@ computers = (url as text, totalPagesCount as number) as table =>
 
                     // add any unmapped columns to the final table for backward compatibility
                     withUnmappedColumns = addUnmappedColumns(expandOperatingSystem, ComputerMappings[UnmappedFields]),
-                    withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, ComputerMappings[UtcColumnNames])
-
+                    withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, ComputerMappings[UtcColumnNames]),
+                    withDuplicateColumns = duplicateColumns(withEpochColumns, ComputerMappings[FieldsToDuplicate])
                 in
-                    withEpochColumns
+                    withDuplicateColumns
     in
         result;
 
 // Mobile device lookup and mapping function.
 //
 // Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
-// - "api" fields are the fields returned by the Jamf Pro API and "mapped" are the fields that will
+// - "api" fields are those returned by the Jamf Pro API and "mapped" are the fields that will
 //   be displayed in the Power BI table. The remapping was necessary to limit the number of
 //   changes to the legacy data model, in an effort to preserve existing data sets and
 //   visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
-// - Some fields from the Jamf Pro API do not have an analogue in the legacy data model
-//   and are excluded at this time. They may be added in the future.
-// - Fields in the "unmapped" list will be removed from legacy data models. Many of these are
-//   duplicative (e.g., model/modelDisplay/model_display).
-// - Dates are mapped to the _utc variant of the field name to match the legacy data model.
 mobileDevices = (url as text, totalPagesCount as number) as table =>
     let
         apiFieldsTopLevel = {"mobileDeviceId", "deviceType"},

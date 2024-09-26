@@ -96,6 +96,21 @@
         [api = "activeDirectoryStatus",  mapped = "computerDetails.active_directory_status"]
     },
 
+    FieldsToDuplicate = {
+        [original = "computerDetails.realname",                 duplicate = "computerDetails.real_name"],
+        [original = "computerDetails.phone",                    duplicate = "computerDetails.phone_number"],
+        [original = "computerDetails.warranty_expires_utc",     duplicate = "computerDetails.warranty_expires"],
+        [original = "computerDetails.lease_expires_utc",        duplicate = "computerDetails.lease_expires"],
+        [original = "computerDetails.po_date_utc",              duplicate = "computerDetails.po_date"],
+        [original = "computerDetails.report_date_utc",          duplicate = "computerDetails.report_date"],
+        [original = "computerDetails.last_contact_time_utc",    duplicate = "computerDetails.last_contact_time"],
+        [original = "computerDetails.cache_size_kb",            duplicate = "computerDetails.cache_size"],
+        [original = "computerDetails.total_ram_mb",             duplicate = "computerDetails.total_ram"],
+        [original = "computerDetails.processor_speed_mhz",      duplicate = "computerDetails.processor_speed"],
+        [original = "computerDetails.bus_speed_mhz",            duplicate = "computerDetails.bus_speed"],
+        [original = "computerDetails.initial_entry_date_utc",   duplicate = "computerDetails.initial_entry_date"]
+    },
+
     General =           [api = ApiFields(GeneralFields),            mapped = TableFields(GeneralFields)],
     RemoteManagement =  [api = ApiFields(RemoteManagementFields),   mapped = TableFields(RemoteManagementFields)],
     MdmCapable =        [api = ApiFields(MdmCapableFields),         mapped = TableFields(MdmCapableFields)],
@@ -122,38 +137,22 @@
     },
 
     /**
-    * Fields that are not mapped to the legacy model, included here for reference.
-    * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
-    * these fields will be removed. 
-    *
-    * Some generic date/time fields like `computerDetails.report_date` have been
-    * omitted in favor of their `_utc` and `_epoch` variants.
-    *
-    * Others fields may not have had a direct analog in the Jamf Pro API.
+    * Fields that did not have a clear analog to the Jamf Pro API data model. To ensure
+    * backward compatibility with existing datasets and visualizations, these fields are
+    * added with `null` values for all rows. See the `addUnmappedColumns` function for
+    * detail.
     */
     UnmappedFields = {
         "computerDetails.country_name",
         "computerDetails.remote_management.management_password_sha256",
         "computerDetails.management_status",
-        "computerDetails.report_date",
-        "computerDetails.last_contact_time",
-        "computerDetails.initial_entry_date",
         "computerDetails.sus",
         "computerDetails.netboot_server",
-        "computerDetails.real_name",
-        "computerDetails.phone_number",
-        "computerDetails.po_date",
-        "computerDetails.warranty_expires",
-        "computerDetails.lease_expires",
         "computerDetails.os_applecare_id",
         "computerDetails.os_maintenance_expires",
         "computerDetails.attachments",
         "computerDetails.master_password_set",
         "computerDetails.service_pack",
-        "computerDetails.processor_speed",
-        "computerDetails.total_ram",
-        "computerDetails.bus_speed",
-        "computerDetails.cache_size",
         "computerDetails.institutional_recovery_key",
         "computerDetails.disk_encryption_configuration",
         "computerDetails.filevault2_users",
