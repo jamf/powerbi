@@ -45,7 +45,6 @@ shared JamfPro.JamfNavTable = (url as text) as table =>
     in
         navTable;
 
-// simple function to validate that URL is in correct format
 validateUrlScheme = (url as text) as text =>
     if (Uri.Parts(url)[Scheme] <> "https") then
         error "Url scheme must be HTTPS"
@@ -380,13 +379,15 @@ computers = (url as text, totalPagesCount as number) as table =>
     in
         result;
 
-// Mobile device lookup and mapping function.
-//
-// Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
-// - "api" fields are those returned by the Jamf Pro API and "mapped" are the fields that will
-//   be displayed in the Power BI table. The remapping was necessary to limit the number of
-//   changes to the legacy data model, in an effort to preserve existing data sets and
-//   visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
+/** 
+*  Mobile device lookup and mapping function.
+*
+*  Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
+*  - "api" fields are those returned by the Jamf Pro API and "mapped" are the fields that will
+*    be displayed in the Power BI table. The remapping was necessary to limit the number of
+*    changes to the legacy data model, in an effort to preserve existing data sets and
+*    visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
+*/   
 mobileDevices = (url as text, totalPagesCount as number) as table =>
     let
         apiFieldsTopLevel = {"mobileDeviceId", "deviceType"},
@@ -472,9 +473,7 @@ mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
                     listOfPages = List.Transform(
                         pages,
                         each
-                            getPageMobileDevices(
-                                url, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _
-                            )
+                            getPageMobileDevices(url, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _)
                     ),
                     rowPerDevice = List.Combine(listOfPages),
                     selectedColumns = Table.FromRecords(
@@ -483,19 +482,11 @@ mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
                         MissingField.UseNull
                     ),
                     renameIdField = Table.RenameColumns(selectedColumns, {{"mobileDeviceId", "id"}}),
-                    expandGeneral = Table.ExpandRecordColumn(
-                        renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral
-                    ),
-                    expandHardware = Table.ExpandRecordColumn(
-                        expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware
-                    ),
-                    expandUserAndLocation = Table.ExpandRecordColumn(
-                        expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation
-                    ),
+                    expandGeneral = Table.ExpandRecordColumn(renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral),
+                    expandHardware = Table.ExpandRecordColumn(expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation),
                     normalizeApps = Table.ExpandListColumn(expandUserAndLocation, "applications"),
-                    expandApps = Table.ExpandRecordColumn(
-                        normalizeApps, "applications", apiFieldsApps, tableFieldsApps
-                    )
+                    expandApps = Table.ExpandRecordColumn(normalizeApps, "applications", apiFieldsApps, tableFieldsApps)
                 in
                     expandApps,
         
@@ -565,10 +556,7 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
             }
         ),
 
-        emptyTable = #table(
-            finalColumnNames,
-            {}
-        ),
+        emptyTable = #table(finalColumnNames, {}),
         result =
             if totalPagesCount = 0 then
                 emptyTable
@@ -578,9 +566,7 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
                     listOfPages = List.Transform(
                         pages,
                         each
-                            getPageMobileDevices(
-                                url, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "EXTENSION_ATTRIBUTES"}, _
-                            )
+                            getPageMobileDevices(url, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "EXTENSION_ATTRIBUTES"}, _)
                     ),
                     rowPerDevice = List.Combine(listOfPages),
                     selectedColumns = Table.FromRecords(
@@ -614,7 +600,10 @@ normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields
     let
         normalizeEAs = Table.ExpandListColumn(t, columnName),
         expandEAs = Table.ExpandRecordColumn(
-            normalizeEAs, columnName, {apiFields[id], apiFields[name], apiFields[dataType], apiFields[value]}, {tableFields[id], tableFields[name], tableFields[dataType], tableFields[value]}
+            normalizeEAs,
+            columnName,
+            {apiFields[id],     apiFields[name],    apiFields[dataType],    apiFields[value]},
+            {tableFields[id],   tableFields[name],  tableFields[dataType],  tableFields[value]}
         ),
         expandValues = Table.ExpandListColumn(expandEAs, tableFields[value]),
         filteredEAs = Table.SelectRows(expandValues, each Record.Field(_, tableFields[id]) <> null),
