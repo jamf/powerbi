@@ -81,9 +81,9 @@
         [api = "appleCareId",                 mapped = "mobileDeviceDetails.applecare_id"],
         [api = "purchasePrice",               mapped = "mobileDeviceDetails.purchase_price"],
         [api = "purchasingAccount",           mapped = "mobileDeviceDetails.purchasing_account"],
-        [api = "poDate",                      mapped = "mobileDeviceDetails.po_date"],
-        [api = "warrantyExpiresDate",         mapped = "mobileDeviceDetails.warranty_expires"],
-        [api = "leaseExpiresDate",            mapped = "mobileDeviceDetails.lease_expires"],
+        [api = "poDate",                      mapped = "mobileDeviceDetails.po_date_utc"],
+        [api = "warrantyExpiresDate",         mapped = "mobileDeviceDetails.warranty_expires_utc"],
+        [api = "leaseExpiresDate",            mapped = "mobileDeviceDetails.lease_expires_utc"],
         [api = "lifeExpectancy",              mapped = "mobileDeviceDetails.life_expectancy"],
         [api = "purchasingContact",           mapped = "mobileDeviceDetails.purchasing_contact"]
     },
@@ -117,6 +117,37 @@
         [api = "lostModeLocationTimestamp",                mapped = "mobileDeviceDetails.lost_mode_location_timestamp"]
     },
 
+    AppsAndEAsFieldsToDuplicate = {
+        [original = "name",                                 duplicate = "device_name"],
+        [original = "name",                                 duplicate = "display_name"],
+        [original = "model",                                duplicate = "model_display"],
+        [original = "model",                                duplicate = "modelDisplay"]
+    },
+
+    FieldsToDuplicate = {
+        [original = "mobileDeviceDetails.managed",          duplicate = "managed"],
+        [original = "mobileDeviceDetails.udid",             duplicate = "udid"],
+        [original = "mobileDeviceDetails.serial_number",    duplicate = "serial_number"],
+        [original = "mobileDeviceDetails.wifi_mac_address", duplicate = "wifi_mac_address"],
+        [original = "mobileDeviceDetails.capacity_mb",      duplicate = "mobileDeviceDetails.capacity"],
+        [original = "mobileDeviceDetails.available_mb",     duplicate = "mobileDeviceDetails.available"],
+        [original = "name",                                 duplicate = "device_name"],
+        [original = "mobileDeviceDetails.model",            duplicate = "model"],
+        [original = "mobileDeviceDetails.model",            duplicate = "modelDisplay"],
+        [original = "mobileDeviceDetails.model",            duplicate = "model_display"],
+        [original = "mobileDeviceDetails.model",            duplicate = "mobileDeviceDetails.modelDisplay"],
+        [original = "mobileDeviceDetails.model",            duplicate = "mobileDeviceDetails.model_display"],
+        [original = "mobileDeviceDetails.model_identifier", duplicate = "model_identifier"],
+        [original = "mobileDeviceDetails.supervised",       duplicate = "supervised"],
+        [original = "mobileDeviceDetails.username",         duplicate = "username"],
+        [original = "mobileDeviceDetails.real_name",        duplicate = "mobileDeviceDetails.realname"],
+        [original = "mobileDeviceDetails.phone_number",     duplicate = "phone_number"],
+        [original = "mobileDeviceDetails.po_date_utc",      duplicate = "mobileDeviceDetails.po_date"],
+        [original = "mobileDeviceDetails.last_inventory_update_utc", duplicate = "mobileDeviceDetails.last_inventory_update"],
+        [original = "mobileDeviceDetails.lease_expires_utc",         duplicate = "mobileDeviceDetails.lease_expires"],
+        [original = "mobileDeviceDetails.warranty_expires_utc",      duplicate = "mobileDeviceDetails.warranty_expires"]
+    },
+
     General =           [api = ApiFields(GeneralFields),            mapped = TableFields(GeneralFields)],
     Hardware =          [api = ApiFields(HardwareFields),           mapped = TableFields(HardwareFields)],
     UserAndLocation =   [api = ApiFields(UserAndLocationFields),    mapped = TableFields(UserAndLocationFields)],
@@ -143,37 +174,15 @@
         "mobileDeviceDetails.lost_location_utc"
     },
 
-    /*
-    */
-
     /**
-    * Fields that are not mapped to the legacy model, included here for reference.
-    * For any legacy existing datasets/visualizations that used connector 1.0.0-beta,
-    * these fields will be removed. 
-    *
-    * Some generic date/time fields like `mobileDeviceDetails.last_inventory_update`
-    * have been omitted in favor of their `_utc` and `_epoch` variants.
-    *
-    * The mobile device legacy model, in particular, had a number of duplicate fields
-    * that have not been mapped. For example, `modelDisplay`, `mobileDeviceDetails.modelDisplay`,
-    * and `mobileDeviceDetails.modelDisplay` have been excluded from the mapping, as they
-    * represent the same data as the `mobileDeviceDetails.model` field.
+    * Fields that did not have a clear analog to the Jamf Pro API data model. To ensure
+    * backward compatibility with existing datasets and visualizations, these fields are
+    * added with `null` values for all rows. See the `addUnmappedColumns` function for
+    * detail.
     */
     UnmappedFields = {
-        "phone_number",
-        "wifi_mac_address",
-        "model",
-        "model_identifier",
-        "modelDisplay",
-        "model_display",
-        "username",
-        "mobileDeviceDetails.last_inventory_update",
-        "mobileDeviceDetails.capacity",
-        "mobileDeviceDetails.available",
-        "mobileDeviceDetails.modelDisplay",
-        "mobileDeviceDetails.model_display",
+        "mobileDeviceDetails.initial_entry_date_utc",
         "mobileDeviceDetails.location_services_enabled",
-        "mobileDeviceDetails.realname",
         "mobileDeviceDetails.attachments",
         "mobileDeviceDetails.lost_mode_enforced",
         "mobileDeviceDetails.lost_location_latitude",

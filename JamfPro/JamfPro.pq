@@ -45,7 +45,6 @@ shared JamfPro.JamfNavTable = (url as text) as table =>
     in
         navTable;
 
-// simple function to validate that URL is in correct format
 validateUrlScheme = (url as text) as text =>
     if (Uri.Parts(url)[Scheme] <> "https") then
         error "Url scheme must be HTTPS"
@@ -371,24 +370,24 @@ computers = (url as text, totalPagesCount as number) as table =>
                     expandSecurity = Table.ExpandRecordColumn(expandHardware, "security", ComputerMappings[Security][api], ComputerMappings[Security][mapped]),
                     expandOperatingSystem = Table.ExpandRecordColumn(expandSecurity, "operatingSystem", ComputerMappings[OperatingSystem][api], ComputerMappings[OperatingSystem][mapped]),
 
-                    expandOperatingSystemWithEpoch = copyUtcColumnsToEpoch(expandOperatingSystem, ComputerMappings[UtcColumnNames])
+                    // add any unmapped columns to the final table for backward compatibility
+                    withUnmappedColumns = addUnmappedColumns(expandOperatingSystem, ComputerMappings[UnmappedFields]),
+                    withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, ComputerMappings[UtcColumnNames]),
+                    withDuplicateColumns = duplicateColumns(withEpochColumns, ComputerMappings[FieldsToDuplicate])
                 in
-                    expandOperatingSystemWithEpoch
+                    withDuplicateColumns
     in
         result;
 
-// Mobile device lookup and mapping function.
-//
-// Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
-// - "api" fields are the fields returned by the Jamf Pro API and "mapped" are the fields that will
-//   be displayed in the Power BI table. The remapping was necessary to limit the number of
-//   changes to the legacy data model, in an effort to preserve existing data sets and
-//   visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
-// - Some fields from the Jamf Pro API do not have an analogue in the legacy data model
-//   and are excluded at this time. They may be added in the future.
-// - Fields in the "unmapped" list will be removed from legacy data models. Many of these are
-//   duplicative (e.g., model/modelDisplay/model_display).
-// - Dates are mapped to the _utc variant of the field name to match the legacy data model.
+/** 
+*  Mobile device lookup and mapping function.
+*
+*  Notes about backward compatibility with the legacy 1.0.0-beta version of the connector:
+*  - "api" fields are those returned by the Jamf Pro API and "mapped" are the fields that will
+*    be displayed in the Power BI table. The remapping was necessary to limit the number of
+*    changes to the legacy data model, in an effort to preserve existing data sets and
+*    visualizations where possible. See MobileDeviceFieldMappings.pqm for the list of mappings.
+*/   
 mobileDevices = (url as text, totalPagesCount as number) as table =>
     let
         apiFieldsTopLevel = {"mobileDeviceId", "deviceType"},
@@ -439,12 +438,11 @@ mobileDevices = (url as text, totalPagesCount as number) as table =>
                 in
                     expandNetwork,
 
-        addEpochColumns = copyUtcColumnsToEpoch(result, MobileDeviceMappings[UtcColumnNames]),
-        // duplicate the name column as device_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(addEpochColumns, "device_name", each [name], type text),
-        compatibleSerialNumber = Table.AddColumn(compatibleDisplayName, "serial_number", each [mobileDeviceDetails.serial_number], type text)
+        withUnmappedColumns = addUnmappedColumns(result, MobileDeviceMappings[UnmappedFields]),
+        withEpochColumns = copyUtcColumnsToEpoch(withUnmappedColumns, MobileDeviceMappings[UtcColumnNames]),
+        withDuplicateColumns = duplicateColumns(withEpochColumns, MobileDeviceMappings[FieldsToDuplicate])
     in
-        result;
+        withDuplicateColumns;
 
 mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
     let
@@ -475,9 +473,7 @@ mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
                     listOfPages = List.Transform(
                         pages,
                         each
-                            getPageMobileDevices(
-                                url, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _
-                            )
+                            getPageMobileDevices(url, {"GENERAL", "APPLICATIONS", "HARDWARE", "USER_AND_LOCATION"}, _)
                     ),
                     rowPerDevice = List.Combine(listOfPages),
                     selectedColumns = Table.FromRecords(
@@ -486,28 +482,17 @@ mobileDeviceApplications = (url as text, totalPagesCount as number) as table =>
                         MissingField.UseNull
                     ),
                     renameIdField = Table.RenameColumns(selectedColumns, {{"mobileDeviceId", "id"}}),
-                    expandGeneral = Table.ExpandRecordColumn(
-                        renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral
-                    ),
-                    expandHardware = Table.ExpandRecordColumn(
-                        expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware
-                    ),
-                    expandUserAndLocation = Table.ExpandRecordColumn(
-                        expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation
-                    ),
+                    expandGeneral = Table.ExpandRecordColumn(renameIdField, "general", apiFieldsGeneral, tableFieldsGeneral),
+                    expandHardware = Table.ExpandRecordColumn(expandGeneral, "hardware", apiFieldsHardware, tableFieldsHardware),
+                    expandUserAndLocation = Table.ExpandRecordColumn(expandHardware, "userAndLocation", apiFieldsUserAndLocation, tableFieldsUserAndLocation),
                     normalizeApps = Table.ExpandListColumn(expandUserAndLocation, "applications"),
-                    expandApps = Table.ExpandRecordColumn(
-                        normalizeApps, "applications", apiFieldsApps, tableFieldsApps
-                    )
+                    expandApps = Table.ExpandRecordColumn(normalizeApps, "applications", apiFieldsApps, tableFieldsApps)
                 in
                     expandApps,
-        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(result, "display_name", each [name], type text),
-        // do the same for model, copying it to both modelDisplay and model_display
-        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
-        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
+        
+        withDuplicateColumns = duplicateColumns(result, MobileDeviceMappings[AppsAndEAsFieldsToDuplicate])
     in
-        compatibleModelDisplay;
+        withDuplicateColumns;
 
 computerExtensionAttributes = (url as text, totalPagesCount as number) as table =>
     let
@@ -571,10 +556,7 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
             }
         ),
 
-        emptyTable = #table(
-            finalColumnNames,
-            {}
-        ),
+        emptyTable = #table(finalColumnNames, {}),
         result =
             if totalPagesCount = 0 then
                 emptyTable
@@ -584,9 +566,7 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
                     listOfPages = List.Transform(
                         pages,
                         each
-                            getPageMobileDevices(
-                                url, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "EXTENSION_ATTRIBUTES"}, _
-                            )
+                            getPageMobileDevices(url, {"GENERAL", "HARDWARE", "USER_AND_LOCATION", "PURCHASING", "EXTENSION_ATTRIBUTES"}, _)
                     ),
                     rowPerDevice = List.Combine(listOfPages),
                     selectedColumns = Table.FromRecords(
@@ -611,21 +591,19 @@ mobileDeviceExtensionAtttributes = (url as text, totalPagesCount as number) as t
                 in
                     combinedEAs,
 
-        finalColumns = Table.SelectColumns(result, finalColumnNames),
-
-        // duplicate the name column as display_name. we need the same value in both columns for strict backward compatibility
-        compatibleDisplayName = Table.AddColumn(finalColumns, "display_name", each [name], type text),
-        // do the same for model, copying it to both modelDisplay and model_display
-        compatibleModel_Display = Table.AddColumn(compatibleDisplayName, "model_display", each [model], type text),
-        compatibleModelDisplay = Table.AddColumn(compatibleModel_Display, "modelDisplay", each [model], type text)
+        finalUniqueColumns = Table.SelectColumns(result, finalColumnNames),
+        withDuplicateColumns = duplicateColumns(finalUniqueColumns, MobileDeviceMappings[AppsAndEAsFieldsToDuplicate])
     in
-        compatibleModelDisplay;
+        withDuplicateColumns;
 
 normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields as record) as table =>
     let
         normalizeEAs = Table.ExpandListColumn(t, columnName),
         expandEAs = Table.ExpandRecordColumn(
-            normalizeEAs, columnName, {apiFields[id], apiFields[name], apiFields[dataType], apiFields[value]}, {tableFields[id], tableFields[name], tableFields[dataType], tableFields[value]}
+            normalizeEAs,
+            columnName,
+            {apiFields[id],     apiFields[name],    apiFields[dataType],    apiFields[value]},
+            {tableFields[id],   tableFields[name],  tableFields[dataType],  tableFields[value]}
         ),
         expandValues = Table.ExpandListColumn(expandEAs, tableFields[value]),
         filteredEAs = Table.SelectRows(expandValues, each Record.Field(_, tableFields[id]) <> null),
@@ -633,7 +611,7 @@ normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields
     in
         result;
 
-dateString8600ToEpochMillis = (dateString as text) as number =>
+dateStringIso8601ToEpochMillis = (dateString as text) as number =>
     let
         dateObject = DateTime.FromText(dateString),
         epochMillis = Duration.TotalSeconds(Duration.From(dateObject - #datetime(1970, 1, 1, 0, 0, 0))) * 1000
@@ -653,12 +631,40 @@ copyUtcColumnsToEpoch = (t as table, utcColumnNames as list) as table =>
                 let
                     utcColumnName = current{0},
                     epochColumnName = current{1},
-                    addColumn = Table.AddColumn(state, epochColumnName, each try dateString8600ToEpochMillis(Record.Field(_, utcColumnName)) otherwise 0, type number)
+                    addColumn = Table.AddColumn(state, epochColumnName, each try dateStringIso8601ToEpochMillis(Record.Field(_, utcColumnName)) otherwise 0, type number)
                 in
                     addColumn
         )
     in
         addEpochColumns;
+
+addUnmappedColumns = (t as table, unmappedFields as list) as table =>
+    let
+        result = List.Accumulate(
+            unmappedFields,
+            t,
+            (state, current) =>
+                try
+                    Table.AddColumn(state, current, each null, type any)
+                otherwise
+                    state
+        )
+    in
+        result;
+
+duplicateColumns = (t as table, fieldsToDuplicate as list) as table =>
+    let
+        result = List.Accumulate(
+            fieldsToDuplicate,
+            t,
+            (state, current) =>
+                let
+                    addColumn = Table.AddColumn(state, current[duplicate], each Record.Field(_, current[original]), type any)
+                in
+                    addColumn
+        )
+    in
+        result;
 
 // Data Source definition
 JamfPro = [
