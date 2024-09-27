@@ -611,7 +611,7 @@ normalizeEAs = (t as table, columnName as text, apiFields as record, tableFields
     in
         result;
 
-dateString8600ToEpochMillis = (dateString as text) as number =>
+dateStringIso8601ToEpochMillis = (dateString as text) as number =>
     let
         dateObject = DateTime.FromText(dateString),
         epochMillis = Duration.TotalSeconds(Duration.From(dateObject - #datetime(1970, 1, 1, 0, 0, 0))) * 1000
@@ -631,7 +631,7 @@ copyUtcColumnsToEpoch = (t as table, utcColumnNames as list) as table =>
                 let
                     utcColumnName = current{0},
                     epochColumnName = current{1},
-                    addColumn = Table.AddColumn(state, epochColumnName, each try dateString8600ToEpochMillis(Record.Field(_, utcColumnName)) otherwise 0, type number)
+                    addColumn = Table.AddColumn(state, epochColumnName, each try dateStringIso8601ToEpochMillis(Record.Field(_, utcColumnName)) otherwise 0, type number)
                 in
                     addColumn
         )
