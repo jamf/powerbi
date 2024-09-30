@@ -117,13 +117,34 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="FunctionName" xml:space="preserve">
+    <value>Jamf Pro</value>
+  </data>
+  <data name="FunctionParamJamfUrlName" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="FunctionParamJamfUrlFieldCaption" xml:space="preserve">
+    <value>Jamf Pro URL</value>
+  </data>
+  <data name="FunctionParamJamfUrlFieldDescription" xml:space="preserve">
+    <value>The URL for your Jamf Pro instance</value>
+  </data>
   <data name="ButtonHelp" xml:space="preserve">
-    <value>Connect to Jamf Pro</value>
+    <value>Import data from Jamf Pro</value>
   </data>
   <data name="ButtonTitle" xml:space="preserve">
-    <value>JamfPro</value>
+    <value>Jamf Pro</value>
   </data>
   <data name="DataSourceLabel" xml:space="preserve">
-    <value>JamfPro</value>
+    <value>Jamf Pro</value>
+  </data>
+  <data name="AuthLabelUsernamePassword" xml:space="preserve">
+    <value>Username Password</value>
+  </data>
+  <data name="AuthLabelApiClientKey" xml:space="preserve">
+    <value>API Client</value>
+  </data>
+  <data name="AuthLabelApiClientKeyLabel" xml:space="preserve">
+    <value>Enter as client_id:client_secret</value>
   </data>
 </root>

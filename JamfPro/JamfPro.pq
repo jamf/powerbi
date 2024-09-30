@@ -11,14 +11,14 @@ shared JamfPro.Contents = Value.ReplaceType(
     type function (
         jamfUrl as (
             Uri.Type meta [
-                Documentation.Name = "URL",
-                Documentation.FieldCaption = "Jamf Pro URL",
-                Documentation.FieldDescription = "The URL for your Jamf Pro instance",
+                Documentation.Name = Extension.LoadString("FunctionParamJamfUrlName"),
+                Documentation.FieldCaption = Extension.LoadString("FunctionParamJamfUrlFieldCaption"),
+                Documentation.FieldDescription = Extension.LoadString("FunctionParamJamfUrlFieldDescription"),
                 Documentation.FieldSampleValues = {"https://acme.jamfcloud.com"}
             ]
         )
     ) as text meta [
-        Documentation.Name = "Jamf Pro"
+        Documentation.Name = Extension.LoadString("FunctionName")
     ]
 );
 
@@ -671,24 +671,22 @@ JamfPro = [
     TestConnection = (dataSourcePath) => {"JamfPro.JamfNavTable", dataSourcePath},
     Authentication = [
         UsernamePassword = [
-            Label = "Username Password",
-            UsernameLabel = "Username",
-            PasswordLabel = "Password"
+            Label = Extension.LoadString("AuthLabelUsernamePassword")
         ],
         Key = [
-            Label = "API Client",
-            KeyLabel = "Enter as client_id:client_secret"
+            Label = Extension.LoadString("AuthLabelApiClientKey"),
+            KeyLabel = Extension.LoadString("AuthLabelApiClientKeyLabel")
         ]
     ],
-    Label = "Jamf Pro"
+    Label = Extension.LoadString("DataSourceLabel")
 ];
 
 // Data Source UI publishing description
 JamfPro.Publish = [
     Beta = false,
     Category = "Other",
-    ButtonText = {"Jamf Pro", "Import data from Jamf Pro"},
-    LearnMoreUrl = "https://www.jamf.com/",
+    ButtonText = {Extension.LoadString("ButtonTitle"), Extension.LoadString("ButtonHelp")},
+    LearnMoreUrl = "https://marketplace.jamf.com/details/power-bi",
     SourceImage = JamfPro__Get_Devices.Icons,
     SourceTypeImage = JamfPro__Get_Devices.Icons
 ];
